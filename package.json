@@ -1,0 +1,91 @@
+{
+  "name": "medisoft-pro",
+  "private": true,
+  "version": "1.3.8",
+  "description": "MediSoft Pro — Pharmacy Management System",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "electron": "electron .",
+    "electron:dev": "concurrently \"npm run dev -- --port 5173 --strictPort\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .\"",
+    "dist": "npm run build && electron-builder",
+    "publish-update": "npm run dist && node scripts/copy-to-update-server.js",
+    "rebuild": "electron-rebuild -f -w better-sqlite3",
+    "lint": "oxlint",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@tailwindcss/vite": "^4.3.1",
+    "better-sqlite3": "^12.11.1",
+    "clsx": "^2.1.1",
+    "electron-updater": "^6.8.9",
+    "lucide-react": "^1.21.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-router-dom": "^7.18.0",
+    "recharts": "^3.9.0",
+    "tailwindcss": "^4.3.1",
+    "zustand": "^5.0.14"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.2",
+    "concurrently": "^10.0.3",
+    "cross-env": "^10.1.0",
+    "electron": "^42.5.0",
+    "electron-builder": "^26.15.3",
+    "electron-rebuild": "^3.2.9",
+    "oxlint": "^1.69.0",
+    "vite": "^8.1.0",
+    "wait-on": "^9.0.10"
+  },
+  "build": {
+    "appId": "com.medisoft.pro",
+    "productName": "MediSoft Pro",
+    "copyright": "Copyright © 2025 MediSoft Pro",
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/better-sqlite3/**",
+      "node_modules/bindings/**",
+      "node_modules/file-uri-to-path/**"
+    ],
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "http://192.168.1.21:8080",
+        "channel": "latest"
+      }
+    ],
+    "directories": {
+      "output": "release",
+      "buildResources": "public"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "public/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "MediSoft Pro"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json",
+      "node_modules/**/*"
+    ],
+    "extraResources": []
+  }
+}

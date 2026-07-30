@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MediSoft Pro — Pharmacy Management System</title>
+    <style>
+      /* Fonts - Fallback to system fonts for offline support */
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Hanken+Grotesk:wght@600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+      
+      /* Material Symbols - COMMENTED OUT FOR OFFLINE */
+      /* @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap'); */
+      
+      /* USE SEGOE FLUENT ICONS (Built into Windows 10/11) */
+      .material-symbols-outlined {
+        font-family: 'Segoe Fluent Icons', 'Segoe MDL2 Assets', Arial !important;
+        font-weight: normal !important;
+        font-style: normal !important;
+        font-size: 24px;
+        line-height: 1;
+        letter-spacing: normal;
+        text-transform: none;
+        display: inline-block;
+        white-space: nowrap;
+        word-wrap: normal;
+        direction: ltr;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+        -moz-osx-font-smoothing: grayscale;
+        vertical-align: middle;
+      }
+      
+      /* Icon text to Segoe Fluent Icons unicode mapping */
+      .material-symbols-outlined {
+        text-indent: -9999px; /* Hide text */
+        position: relative;
+      }
+      
+      .material-symbols-outlined::before {
+        text-indent: 0;
+        position: absolute;
+        left: 0;
+        top: 50%;
+        transform: translateY(-50%);
+      }
+      
+      /* Map common icons to Segoe Fluent Icons unicode */
+      .material-symbols-outlined:empty::before {
+        content: '\E8A1'; /* Default: checkbox */
+      }
+      
+      /* SVG Icon support */
+      .icon {
+        display: inline-block;
+        width: 1em;
+        height: 1em;
+        fill: currentColor;
+        vertical-align: middle;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

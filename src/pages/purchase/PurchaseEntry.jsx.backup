@@ -1,0 +1,265 @@
+import { useState, useEffect } from 'react'
+import { api } from '../../lib/api'
+import { PageHeader, Card, Btn, Input, Select, fmt, today } from '../../components/ui'
+
+const emptyItem = () => ({ 
+  product_id: null, 
+  product_name: '', 
+  category_id: null,
+  rack_location: '',
+  pcs_in_pack: 1,
+  barcode: '',
+  expiry_date: '', 
+  purchase_price: 0, 
+  sale_price: 0, 
+  qty_in_boxes: 0, 
+  qty_loose: 0, 
+  qty: 0, 
+  bonus: 0, 
+  discount_percent: 0, 
+  total: 0 
+})
+
+function calcTotal(item) {
+  const base = (parseFloat(item.purchase_price)||0) * (parseFloat(item.qty)||0)
+  return base * (1 - (parseFloat(item.discount_percent)||0) / 100)
+}
+
+export default function PurchaseEntry() {
+  const [suppliers, setSuppliers] = useState([])
+  const [categories, setCategories] = useState([])
+  const [form, setForm] = useState({ supplier_id: '', invoice_no: '', invoice_date: today(), payment_method: 'credit', notes: '' })
+  const [items, setItems] = useState([emptyItem()])
+  const [productSearch, setProductSearch] = useState({})
+  const [productResults, setProductResults] = useState({})
+  const [supplierProducts, setSupplierProducts] = useState([]) // NEW: Quick list for selected supplier
+  const [showSupplierProducts, setShowSupplierProducts] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [msg, setMsg] = useState(null)
+  const TAX_RATE = 0
+
+  useEffect(() => { 
+    api.purchase.getSuppliers().then(s => setSuppliers(Array.isArray(s) ? s : []))
+    api.inventory.getCategories().then(c => setCategories(Array.isArray(c) ? c : []))
+    // Auto-load next invoice number
+    api.purchase.getNextInvoiceNo().then(invNo => {
+      setForm(f => ({ ...f, invoice_no: invNo }))
+    })
+  }, [])
+
+  // NEW: Load supplier's previous products when supplier changes
+  useEffect(() => {
+    if (form.supplier_id) {
+      api.purchase.getSupplierProducts(form.supplier_id).then(products => {
+        setSupplierProducts(Array.isArray(products) ? products : [])
+      }).catch(() => setSupplierProducts([]))
+    } else {
+      setSupplierProducts([])
+    }
+  }, [form.supplier_id])
+
+  const handleProductSearch = (idx, val) => {
+    setProductSearch(p => ({ ...p, [idx]: val }))
+    if (!val.trim()) { setProductResults(p => ({ ...p, [idx]: [] })); return }
+    setTimeout(() => api.inventory.searchProduct(val).then(r => setProductResults(p => ({ ...p, [idx]: r || [] }))), 250)
+  }
+
+  const selectProduct = (idx, p) => {
+    const updated = [...items]
+    updated[idx] = { 
+      ...updated[idx], 
+      product_id: p.id, 
+      product_name: p.name,
+      category_id: p.category_id || null,
+      rack_location: p.rack_location || '',
+      pcs_in_pack: p.pcs_in_pack || 1,
+      barcode: p.barcode || '',
+      purchase_price: p.trade_price || 0, 
+      sale_price: p.sale_price || 0,
+      qty_in_boxes: 0,
+      qty_loose: 0,
+      qty: 0
+    }
+    updated[idx].total = calcTotal(updated[idx])
+    setItems(updated)
+    setProductSearch(ps => ({ ...ps, [idx]: p.name }))
+    setProductResults(pr => ({ ...pr, [idx]: [] }))
+  }
+
+  const updateItem = (idx, field, val) => {
+    const updated = [...items]
+    updated[idx][field] = val
+    
+    // Calculate total qty from boxes + loose
+    if (field === 'qty_in_boxes' || field === 'qty_loose') {
+      const boxes = parseInt(updated[idx].qty_in_boxes) || 0
+      const loose = parseInt(updated[idx].qty_loose) || 0
+      const pcsInPack = parseInt(updated[idx].pcs_in_pack) || 1
+      updated[idx].qty = (boxes * pcsInPack) + loose
+    }
+    
+    updated[idx].total = calcTotal(updated[idx])
+    setItems(updated)
+  }
+
+  const addRow = () => setItems([...items, emptyItem()])
+  const removeRow = (idx) => { if (items.length > 1) setItems(items.filter((_, i) => i !== idx)) }
+
+  const subTotal = items.reduce((s, i) => s + (parseFloat(i.total)||0), 0)
+  const taxAmt   = subTotal * TAX_RATE
+  const grandTotal = subTotal + taxAmt
+
+  const handleSave = async () => {
+    const validItems = items.filter(i => i.product_id && parseFloat(i.qty) > 0)
+    if (!form.invoice_no.trim()) return setMsg({ type: 'error', text: 'Enter invoice number.' })
+    if (!validItems.length) return setMsg({ type: 'error', text: 'Add at least one product.' })
+    setSubmitting(true); setMsg(null)
+    try {
+      await api.purchase.createPurchase({ 
+        ...form, 
+        supplier_id: form.supplier_id || null, 
+        branch_id: 1, 
+        sub_total: subTotal, 
+        tax: taxAmt, 
+        grand_total: grandTotal, 
+        paid_amount: form.payment_method === 'cash' ? grandTotal : 0, 
+        items: validItems.map(i => ({ 
+          product_id: i.product_id, 
+          expiry_date: i.expiry_date, 
+          purchase_price: parseFloat(i.purchase_price)||0, 
+          sale_price: parseFloat(i.sale_price)||0, 
+          qty: parseFloat(i.qty),
+          qty_in_boxes: parseInt(i.qty_in_boxes)||0,
+          qty_loose: parseInt(i.qty_loose)||0,
+          bonus: parseFloat(i.bonus)||0, 
+          discount_percent: parseFloat(i.discount_percent)||0, 
+          total: parseFloat(i.total) 
+        })) 
+      })
+      setMsg({ type: 'success', text: `Purchase saved successfully! Invoice: ${result.invoice_no}` })
+      // Load next invoice number for new purchase
+      api.purchase.getNextInvoiceNo().then(invNo => {
+        setForm({ supplier_id: '', invoice_no: invNo, invoice_date: today(), payment_method: 'credit', notes: '' })
+      })
+      setItems([emptyItem()]); setProductSearch({}); setProductResults({})
+    } catch (err) { setMsg({ type: 'error', text: err.message }) }
+    finally { setSubmitting(false) }
+  }
+
+  const supplierOpts = [{ value: '', label: 'Select Supplier' }, ...suppliers.map(s => ({ value: String(s.id), label: s.name }))]
+
+  return (
+    <div className="flex flex-col h-full bg-[#f7f9fb]">
+      <PageHeader title="Purchase Entry" subtitle="Record inbound stock and procurement" actions={<><Btn variant="outline" size="sm">Import CSV</Btn><Btn variant="primary" onClick={handleSave} disabled={submitting}>{submitting && <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}<span className="material-symbols-outlined text-[16px]">save</span>Save (CTRL+S)</Btn></>} />
+      <div className="p-5 space-y-4 flex-1 overflow-auto">
+        {msg && <div className={`flex items-center gap-2 px-4 py-3 rounded-lg text-[13px] font-semibold ${msg.type === 'error' ? 'bg-red-50 text-[#ba1a1a] border border-red-200' : 'bg-green-50 text-green-700 border border-green-200'}`}><span className="material-symbols-outlined text-[18px]">{msg.type === 'error' ? 'error' : 'check_circle'}</span>{msg.text}<button className="ml-auto" onClick={() => setMsg(null)}><span className="material-symbols-outlined text-[16px]">close</span></button></div>}
+
+        {/* Header Form */}
+        <Card className="p-5">
+          <div className="grid grid-cols-4 gap-4">
+            <Select label="Supplier" value={form.supplier_id} onChange={e => setForm({ ...form, supplier_id: e.target.value })} options={supplierOpts} />
+            <Input label="Invoice Number" value={form.invoice_no} onChange={e => setForm({ ...form, invoice_no: e.target.value })} placeholder="INV-2024-0001" required />
+            <Input label="Invoice Date" type="date" value={form.invoice_date} onChange={e => setForm({ ...form, invoice_date: e.target.value })} />
+            <div>
+              <label className="block text-[11px] font-semibold text-[#434653] mb-1 uppercase tracking-wide">Payment Method</label>
+              <div className="flex gap-2">
+                {['credit','cash'].map(m => <button key={m} type="button" onClick={() => setForm({ ...form, payment_method: m })} className={`flex-1 py-1.5 rounded border-2 text-[12px] font-semibold transition-all capitalize ${form.payment_method === m ? 'border-[#003c90] bg-[#003c90]/5 text-[#003c90]' : 'border-[#c3c6d5] text-[#434653] hover:border-[#003c90]/50'}`}>{m}</button>)}
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        {/* Line Items */}
+        <Card>
+          <div className="px-4 py-3 border-b border-[#c3c6d5] flex items-center justify-between bg-[#f7f9fb]">
+            <span className="text-[13px] font-bold text-[#003c90] flex items-center gap-2"><span className="material-symbols-outlined text-[18px]">list_alt</span>Line Items</span>
+            <div className="flex gap-2">
+              {supplierProducts.length > 0 && (
+                <button type="button" onClick={() => setShowSupplierProducts(!showSupplierProducts)} className="px-3 py-1.5 text-[11px] font-semibold border border-[#003c90] text-[#003c90] rounded hover:bg-[#003c90]/5 transition-colors flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[14px]">history</span>
+                  {showSupplierProducts ? 'Hide' : 'Show'} Supplier Products ({supplierProducts.length})
+                </button>
+              )}
+              <Btn type="button" size="sm" variant="outline" onClick={addRow}><span className="material-symbols-outlined text-[14px]">add</span>Add Row</Btn>
+            </div>
+          </div>
+          
+          {/* Supplier Products Quick List */}
+          {showSupplierProducts && supplierProducts.length > 0 && (
+            <div className="px-4 py-3 bg-amber-50 border-b border-amber-200">
+              <p className="text-[11px] font-semibold text-amber-900 mb-2 uppercase">Previously Purchased from this Supplier:</p>
+              <div className="flex flex-wrap gap-2">
+                {supplierProducts.map(p => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => {
+                      const emptyIdx = items.findIndex(i => !i.product_id)
+                      if (emptyIdx >= 0) {
+                        selectProduct(emptyIdx, p)
+                      } else {
+                        addRow()
+                        setTimeout(() => selectProduct(items.length, p), 50)
+                      }
+                    }}
+                    className="px-3 py-1.5 bg-white border border-amber-300 rounded text-[11px] font-semibold text-[#003c90] hover:bg-amber-100 transition-colors"
+                  >
+                    {p.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead><tr className="bg-[#f2f4f6] border-b border-[#c3c6d5]">
+                {['Product Name','Category','Rack','pcs/pack','Expiry','Purchase P.','Sale P.','Boxes','Loose','Total Qty','Bonus','Disc%','Net Amt',''].map(h => <th key={h} className={`px-3 py-2.5 text-[11px] font-bold text-[#434653] uppercase tracking-wider whitespace-nowrap ${['pcs/pack','Purchase P.','Sale P.','Boxes','Loose','Total Qty','Bonus','Disc%','Net Amt'].includes(h)?'text-right':''}`}>{h}</th>)}
+              </tr></thead>
+              <tbody className="divide-y divide-[#eceef0]">
+                {items.map((item, idx) => <tr key={idx} className="hover:bg-[#f7f9fb] group">
+                  <td className="px-3 py-2 w-52 relative">
+                    <input type="text" value={productSearch[idx]!==undefined?productSearch[idx]:(item.product_name||'')} onChange={e => handleProductSearch(idx, e.target.value)} placeholder="Search product..." className="w-full px-2 py-1 border border-[#c3c6d5] rounded text-[12px] focus:border-[#003c90] bg-transparent" />
+                    {productResults[idx]?.length > 0 && <div className="absolute top-full left-3 right-0 bg-white border border-[#c3c6d5] rounded-lg shadow-xl z-40 max-h-48 overflow-y-auto">
+                      {productResults[idx].map(p => <button key={p.id} type="button" onClick={() => selectProduct(idx, p)} className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-[#f2f4f6] border-b border-[#eceef0] last:border-0 text-[12px]"><span className="font-semibold">{p.name}</span><span className="text-[#003c90] font-mono ml-2 text-[10px]">{p.pcs_in_pack}/pk</span></button>)}
+                    </div>}
+                    {item.product_id && <p className="text-[9px] text-[#737784] mt-0.5">{item.pcs_in_pack} pcs/box</p>}
+                  </td>
+                  <td className="px-3 py-2"><input type="date" value={item.expiry_date} onChange={e => updateItem(idx,'expiry_date',e.target.value)} className="w-32 px-2 py-1 border border-[#c3c6d5] rounded text-[12px] focus:border-[#003c90] bg-transparent" /></td>
+                  <td className="px-3 py-2 text-right"><input type="number" min="0" value={item.purchase_price} onChange={e => updateItem(idx,'purchase_price',e.target.value)} className="w-24 px-2 py-1 text-right border border-[#c3c6d5] rounded text-[12px] font-mono focus:border-[#003c90] bg-transparent" /></td>
+                  <td className="px-3 py-2 text-right"><input type="number" min="0" value={item.sale_price} onChange={e => updateItem(idx,'sale_price',e.target.value)} className="w-24 px-2 py-1 text-right border border-[#c3c6d5] rounded text-[12px] font-mono focus:border-[#003c90] bg-transparent" /></td>
+                  <td className="px-3 py-2 text-right"><input type="number" min="0" value={item.qty_in_boxes} onChange={e => updateItem(idx,'qty_in_boxes',e.target.value)} placeholder="0" className="w-16 px-2 py-1 text-right border-2 border-[#003c90]/30 rounded text-[12px] font-bold text-[#003c90] focus:border-[#003c90] bg-transparent" /></td>
+                  <td className="px-3 py-2 text-right"><input type="number" min="0" value={item.qty_loose} onChange={e => updateItem(idx,'qty_loose',e.target.value)} placeholder="0" className="w-16 px-2 py-1 text-right border border-[#c3c6d5] rounded text-[12px] focus:border-[#003c90] bg-transparent" /></td>
+                  <td className="px-3 py-2 text-right">
+                    <span className="inline-block px-2 py-1 bg-[#eceef0] rounded text-[12px] font-bold font-mono text-[#003c90]">
+                      {item.qty || 0}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-right"><input type="number" min="0" value={item.bonus} onChange={e => updateItem(idx,'bonus',e.target.value)} className="w-14 px-2 py-1 text-right border border-[#c3c6d5] rounded text-[12px] focus:border-[#003c90] bg-transparent" /></td>
+                  <td className="px-3 py-2 text-right"><input type="number" min="0" max="100" value={item.discount_percent} onChange={e => updateItem(idx,'discount_percent',e.target.value)} className="w-14 px-2 py-1 text-right border border-[#c3c6d5] rounded text-[12px] focus:border-[#003c90] bg-transparent" /></td>
+                  <td className="px-3 py-2 text-right text-[12px] font-bold font-mono text-[#003c90]">{fmt(item.total)}</td>
+                  <td className="px-3 py-2"><button type="button" onClick={() => removeRow(idx)} className="opacity-0 group-hover:opacity-100 p-1 text-[#737784] hover:text-[#ba1a1a] transition-all"><span className="material-symbols-outlined text-[18px]">delete</span></button></td>
+                </tr>)}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+
+        {/* Totals */}
+        <div className="grid grid-cols-2 gap-4">
+          <Card className="p-4"><Input label="Notes / Remarks" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} placeholder="Shipment notes..." /></Card>
+          <div className="bg-[#003c90] text-white rounded-lg p-5 space-y-3">
+            <div className="flex justify-between border-b border-white/10 pb-2 text-[13px]"><span>Sub Total</span><span className="font-mono">PKR {fmt(subTotal)}</span></div>
+            <div className="flex justify-between border-b border-white/10 pb-2 text-[13px]"><span>Tax ({(TAX_RATE*100).toFixed(0)}%)</span><span className="font-mono">PKR {fmt(taxAmt)}</span></div>
+            <div className="flex justify-between items-end pt-1">
+              <div><span className="text-[11px] text-white/60 uppercase tracking-widest block">Grand Total</span><span className="text-[32px] font-bold">PKR {fmt(grandTotal)}</span></div>
+              <button onClick={handleSave} disabled={submitting} className="px-6 py-3 bg-white text-[#003c90] font-bold text-[13px] rounded-lg hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-60 flex items-center gap-2">
+                {submitting ? <span className="w-4 h-4 border-2 border-[#003c90]/30 border-t-[#003c90] rounded-full animate-spin" /> : <span className="material-symbols-outlined text-[18px]">print</span>}Confirm & Print
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}

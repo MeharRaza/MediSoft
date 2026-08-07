@@ -118,16 +118,16 @@ export default function FastBilling() {
     
     // Keyboard shortcuts
     const handle = (e) => {
-      // Save Bill: Ctrl+S
-      if (e.ctrlKey && e.key === 's') {
+      // Save Bill: Ctrl+S (case-insensitive)
+      if (e.ctrlKey && e.key.toLowerCase() === 's') {
         e.preventDefault()
         e.stopPropagation()
         handleFinishSaleRef.current?.()
         return
       }
       
-      // Print Bill: Ctrl+P (Save with invoice print)
-      if (e.ctrlKey && e.key === 'p') {
+      // Print Bill: Ctrl+P (Save with invoice print, case-insensitive)
+      if (e.ctrlKey && e.key.toLowerCase() === 'p') {
         e.preventDefault()
         e.stopPropagation()
         handleFinishSaleWithPrintRef.current?.()
@@ -189,11 +189,16 @@ export default function FastBilling() {
     const t = setTimeout(() => {
       api.inventory.searchProduct(searchQ).then(results => {
         console.log('🔍 FastBilling Search Results:', results)
+        console.log('🔍 Results array length:', results.length)
         results.forEach(r => {
           console.log(`  - ${r.name}: current_purchase_item_id=${r.current_purchase_item_id}, stock=${r.stock}`)
         })
         setSearchResults(results)
+        console.log('✅ setSearchResults called with', results.length, 'items')
         setSelectedIndex(results.length > 0 ? 0 : -1) // Auto-select first result
+      }).catch(err => {
+        console.error('❌ Search error:', err)
+        setSearchResults([])
       })
     }, 200)
     return () => clearTimeout(t)
@@ -371,6 +376,26 @@ export default function FastBilling() {
       pcs_in_pack: product.pcs_in_pack,
       profit_percent: product.profit_percent
     })
+    
+    // VALIDATION: Check if product has stock
+    if (!product.stock || product.stock <= 0) {
+      alert(`Cannot add "${product.name}" - Out of stock!`)
+      setSearchQ('')
+      setSearchResults([])
+      setSelectedIndex(-1)
+      searchRef.current?.focus()
+      return
+    }
+    
+    // VALIDATION: Check if product has purchase_item_id
+    if (!product.current_purchase_item_id) {
+      alert(`Cannot add "${product.name}" - No purchase record found. Please check inventory.`)
+      setSearchQ('')
+      setSearchResults([])
+      setSelectedIndex(-1)
+      searchRef.current?.focus()
+      return
+    }
     
     setSearchQ('')
     setSearchResults([])

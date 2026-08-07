@@ -13,13 +13,17 @@ module.exports = (ipcMain) => {
     console.log('🛒 Creating sale invoice...')
     const create = db.transaction(() => {
       const invNo = nextInvoiceNo('INV-')
+      // Get current local time explicitly
+      const localTime = db.prepare(`SELECT datetime('now', 'localtime') as dt`).get().dt
+      console.log('📅 Creating invoice with local time:', localTime)
+      
       const r = db.prepare(`
-        INSERT INTO sales (invoice_no,customer_id,branch_id,user_id,payment_method,sub_total,discount,tax,grand_total,paid_amount,change_amount,status,notes)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+        INSERT INTO sales (invoice_no,customer_id,branch_id,user_id,payment_method,sub_total,discount,tax,grand_total,paid_amount,change_amount,status,notes,created_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `).run(invNo, data.customer_id||null, data.branch_id||1, data.user_id||1,
              data.payment_method||'cash', data.sub_total||0, data.discount||0, data.tax||0,
              data.grand_total||0, data.paid_amount||0, data.change_amount||0,
-             data.payment_method === 'credit' ? 'credit' : 'paid', data.notes||null)
+             data.payment_method === 'credit' ? 'credit' : 'paid', data.notes||null, localTime)
 
       const saleId = r.lastInsertRowid
       console.log(`✅ Sale created with ID: ${saleId}, Invoice: ${invNo}`)
@@ -110,6 +114,7 @@ module.exports = (ipcMain) => {
     
     q += ' ORDER BY s.id DESC'
     if (filters.limit) { q += ' LIMIT ?'; params.push(filters.limit) }
+    
     return db.prepare(q).all(...params)
   })
 
@@ -118,27 +123,111 @@ module.exports = (ipcMain) => {
       SELECT s.*, c.name as customer_name FROM sales s
       LEFT JOIN customers c ON c.id=s.customer_id WHERE s.id=?`).get(id)
     if (!sale) return null
+    
+    // Get all items from original sale
     sale.items = db.prepare(`
       SELECT si.*, p.name as product_name, p.generic_name
       FROM sale_items si JOIN products p ON p.id=si.product_id WHERE si.sale_id=?`).all(id)
+    
+    // Get return history for this invoice
+    sale.returns = db.prepare(`
+      SELECT sr.id, sr.total, sr.notes, sr.created_at,
+             GROUP_CONCAT(p.name || ' (Qty: ' || sri.qty || ')', ', ') as returned_items
+      FROM sale_returns sr
+      LEFT JOIN sale_return_items sri ON sri.return_id = sr.id
+      LEFT JOIN products p ON p.id = sri.product_id
+      WHERE sr.sale_id = ?
+      GROUP BY sr.id
+      ORDER BY sr.created_at DESC
+    `).all(id)
+    
+    // Calculate already returned quantities for each item
+    const returnedQtys = db.prepare(`
+      SELECT sri.product_id, SUM(sri.qty) as returned_qty
+      FROM sale_return_items sri
+      JOIN sale_returns sr ON sr.id = sri.return_id
+      WHERE sr.sale_id = ?
+      GROUP BY sri.product_id
+    `).all(id)
+    
+    // Create map of returned quantities
+    const returnedMap = {}
+    returnedQtys.forEach(r => {
+      returnedMap[r.product_id] = r.returned_qty || 0
+    })
+    
+    // Calculate remaining quantities and adjust totals
+    let remainingSubTotal = 0
+    sale.items = sale.items.map(item => {
+      const returnedQty = returnedMap[item.product_id] || 0
+      const remainingQty = item.qty - returnedQty
+      const remainingTotal = remainingQty * item.sale_price
+      remainingSubTotal += remainingTotal
+      
+      return {
+        ...item,
+        original_qty: item.qty,
+        returned_qty: returnedQty,
+        remaining_qty: remainingQty,
+        remaining_total: remainingTotal
+      }
+    }).filter(item => item.remaining_qty > 0) // Only show items with remaining qty
+    
+    // Calculate adjusted invoice totals based on remaining items
+    if (sale.sub_total > 0) {
+      const remainingRatio = remainingSubTotal / sale.sub_total
+      sale.remaining_sub_total = remainingSubTotal
+      sale.remaining_discount = sale.discount * remainingRatio
+      sale.remaining_grand_total = sale.grand_total * remainingRatio
+      
+      console.log(`📄 Invoice ${sale.invoice_no}:`)
+      console.log(`   Original: ${sale.sub_total} → After discount: ${sale.grand_total}`)
+      console.log(`   Remaining: ${sale.remaining_sub_total} → After discount: ${sale.remaining_grand_total}`)
+    } else {
+      sale.remaining_sub_total = 0
+      sale.remaining_discount = 0
+      sale.remaining_grand_total = 0
+    }
+    
     return sale
   })
 
   ipcMain.handle('sales:createReturn', (_, data) => {
     const ret = db.transaction(() => {
-      // Create return record
-      const r = db.prepare(`INSERT INTO sale_returns (sale_id,customer_id,total,notes) VALUES (?,?,?,?)`)
-        .run(data.sale_id||null, data.customer_id||null, data.total||0, data.notes||null)
+      console.log('🔄 Processing sales return...')
+      console.log('📋 Return data received:', { 
+        sale_id: data.sale_id, 
+        items_count: data.items?.length, 
+        total: data.total 
+      })
+      
+      // Get original sale for reference
+      const originalSale = db.prepare(`SELECT invoice_no, sub_total, discount, grand_total FROM sales WHERE id=?`).get(data.sale_id)
+      
+      if (!originalSale) {
+        console.error('❌ Original sale not found!')
+        throw new Error('Original sale not found')
+      }
+      
+      console.log('📄 Original sale:', originalSale)
+      console.log('💵 Return total (after user-provided discount):', data.total)
+      
+      // Get current local time explicitly
+      const localTime = db.prepare(`SELECT datetime('now', 'localtime') as dt`).get().dt
+      
+      // Create return record with final amount (discount already applied by frontend)
+      const r = db.prepare(`INSERT INTO sale_returns (sale_id,customer_id,total,notes,created_at) VALUES (?,?,?,?,?)`)
+        .run(data.sale_id||null, data.customer_id||null, data.total, data.notes||null, localTime)
       const returnId = r.lastInsertRowid
       
-      console.log('🔄 Processing sales return, Return ID:', returnId)
+      console.log(`✅ Return record created with ID: ${returnId}, Total: ${data.total}`)
       
       for (const item of data.items) {
-        // Insert return item
+        // Insert return item (total already calculated by frontend)
         db.prepare(`INSERT INTO sale_return_items (return_id,product_id,batch_id,qty,price,total) VALUES (?,?,?,?,?,?)`)
           .run(returnId, item.product_id, item.batch_id||null, item.qty, item.price, item.total)
         
-        console.log(`📦 Return item: product_id=${item.product_id}, qty=${item.qty}, purchase_item_id=${item.purchase_item_id}`)
+        console.log(`📦 Return item inserted: product_id=${item.product_id}, qty=${item.qty}, price=${item.price}`)
         
         // Update batch stock if batch exists
         if (item.batch_id) {
@@ -161,13 +250,14 @@ module.exports = (ipcMain) => {
         }
       }
       
-      // Update customer balance
+      // Update customer balance with final return amount
       if (data.customer_id) {
         db.prepare('UPDATE customers SET balance=balance-? WHERE id=?').run(data.total, data.customer_id)
+        console.log(`💳 Customer balance reduced by: ${data.total}`)
       }
       
       console.log('✅ Sales return completed successfully')
-      return { id: returnId }
+      return { id: returnId, total: data.total }
     })
     return ret()
   })
@@ -227,14 +317,22 @@ module.exports = (ipcMain) => {
 
   // Dashboard stats IPC (placed here for convenience)
   ipcMain.handle('dashboard:getStats', () => {
-    const today = new Date().toISOString().split('T')[0]
+    // Get today's date from SQLite in local time (to match how we're storing dates)
+    const today = db.prepare(`SELECT date('now', 'localtime') as today`).get().today
+    console.log(`📊 Dashboard Stats - Today (local): ${today}`)
     
-    // Today's Sales - Subtract today's returns
+    // Today's Sales
     const todaySales = db.prepare(`SELECT COALESCE(SUM(grand_total),0) as total, COUNT(*) as count FROM sales WHERE date(created_at)=? AND status != 'voided'`).get(today)
-    const todayReturns = db.prepare(`SELECT COALESCE(SUM(total),0) as total FROM sale_returns WHERE date(created_at)=?`).get(today)
     
-    // Adjust sales for returns (returns are on the day they occur, not original sale date)
+    // Today's Returns (using discounted amounts stored in sale_returns.total)
+    const todayReturns = db.prepare(`SELECT COALESCE(SUM(total),0) as total, COUNT(*) as count FROM sale_returns WHERE date(created_at)=?`).get(today)
+    
+    // Net Sales = Gross Sales - Returns (both amounts now account for discounts)
     const adjustedSales = (todaySales?.total || 0) - (todayReturns?.total || 0)
+    
+    console.log(`   Gross Sales: ${todaySales?.total || 0}`)
+    console.log(`   Returns: ${todayReturns?.total || 0}`)
+    console.log(`   Net Sales: ${adjustedSales}`)
     
     const todayPurchase = db.prepare(`SELECT COALESCE(SUM(grand_total),0) as total FROM purchases WHERE date(created_at)=?`).get(today)
     
@@ -295,14 +393,20 @@ module.exports = (ipcMain) => {
       return expiryTimestamp && expiryTimestamp >= todayTimestamp && expiryTimestamp <= d180Timestamp
     }).length
     
-    console.log(`📊 Dashboard Stats - Expiry Alerts: ${expiringCount} items expiring within 6 months`)
-    
     const pendingRecovery = db.prepare(`SELECT COALESCE(SUM(balance),0) as total FROM customers WHERE balance>0`).get()
     
-    // Profit calculation: sale_total - (per_piece_cost * qty_sold)
-    // Per-piece cost = purchase_price / pcs_in_pack (with safety check for NULL/0)
+    // Profit calculation considering ALL discounts
     const profitToday = db.prepare(`
-      SELECT COALESCE(SUM(si.total - ((pi.purchase_price / CASE WHEN pi.pcs_in_pack IS NULL OR pi.pcs_in_pack = 0 THEN 1 ELSE pi.pcs_in_pack END) * si.qty)),0) as profit
+      SELECT 
+        COALESCE(
+          SUM(
+            -- Actual revenue for this item after all discounts
+            ((si.total / NULLIF(s.sub_total, 0)) * s.grand_total)
+            -- Minus cost price
+            - ((pi.purchase_price / CASE WHEN pi.pcs_in_pack IS NULL OR pi.pcs_in_pack = 0 THEN 1 ELSE pi.pcs_in_pack END) * si.qty)
+          ),
+          0
+        ) as profit
       FROM sale_items si
       JOIN sales s ON s.id=si.sale_id
       LEFT JOIN purchase_items pi ON pi.id=si.purchase_item_id
@@ -321,6 +425,8 @@ module.exports = (ipcMain) => {
     return {
       todaySales: adjustedSales, // Use adjusted sales (sales - returns)
       todaySalesCount: todaySales.count,
+      todayReturns: todayReturns.total,
+      todayReturnsCount: todayReturns.count,
       todayPurchase: todayPurchase.total,
       lowStock: lowStock.count,
       expiryAlerts: expiringCount,
@@ -375,4 +481,65 @@ module.exports = (ipcMain) => {
       }
     }
   })
+
+  // TESTING HELPER: Reset database for fresh testing
+  ipcMain.handle('testing:resetDatabase', () => {
+    console.log('\n🗑️  RESETTING DATABASE FOR FRESH TESTING\n')
+    
+    const reset = db.transaction(() => {
+      const today = new Date().toISOString().split('T')[0]
+      
+      // 1. Delete all Nims purchase items
+      console.log('📦 Deleting all Nims purchase items...')
+      const nimsProduct = db.prepare(`SELECT id FROM products WHERE name LIKE '%nims%'`).all()
+      
+      if (nimsProduct.length > 0) {
+        const nimsIds = nimsProduct.map(p => p.id).join(',')
+        const deletedPurchaseItems = db.prepare(`DELETE FROM purchase_items WHERE product_id IN (${nimsIds})`).run()
+        console.log(`   ✅ Deleted ${deletedPurchaseItems.changes} Nims purchase_items`)
+      }
+      
+      // 2. Delete today's sales
+      console.log('💰 Deleting today\'s sales...')
+      const todaySales = db.prepare(`SELECT id FROM sales WHERE date(created_at) = ?`).all(today)
+      
+      if (todaySales.length > 0) {
+        const saleIds = todaySales.map(s => s.id).join(',')
+        const deletedSaleItems = db.prepare(`DELETE FROM sale_items WHERE sale_id IN (${saleIds})`).run()
+        console.log(`   ✅ Deleted ${deletedSaleItems.changes} sale_items`)
+        
+        const deletedSales = db.prepare(`DELETE FROM sales WHERE id IN (${saleIds})`).run()
+        console.log(`   ✅ Deleted ${deletedSales.changes} sales`)
+      }
+      
+      // 3. Delete today's returns
+      console.log('🔄 Deleting today\'s returns...')
+      const todayReturns = db.prepare(`SELECT id FROM sale_returns WHERE date(created_at) = ?`).all(today)
+      
+      if (todayReturns.length > 0) {
+        const returnIds = todayReturns.map(r => r.id).join(',')
+        const deletedReturnItems = db.prepare(`DELETE FROM sale_return_items WHERE return_id IN (${returnIds})`).run()
+        console.log(`   ✅ Deleted ${deletedReturnItems.changes} return_items`)
+        
+        const deletedReturns = db.prepare(`DELETE FROM sale_returns WHERE id IN (${returnIds})`).run()
+        console.log(`   ✅ Deleted ${deletedReturns.changes} returns`)
+      }
+      
+      // 4. Delete today's purchases
+      console.log('🛒 Deleting today\'s purchases...')
+      const todayPurchases = db.prepare(`SELECT id FROM purchases WHERE date(created_at) = ?`).all(today)
+      
+      if (todayPurchases.length > 0) {
+        const purchaseIds = todayPurchases.map(p => p.id).join(',')
+        const deletedPurchases = db.prepare(`DELETE FROM purchases WHERE id IN (${purchaseIds})`).run()
+        console.log(`   ✅ Deleted ${deletedPurchases.changes} purchases`)
+      }
+      
+      console.log('\n✅ DATABASE RESET COMPLETE! Ready for fresh testing.\n')
+      return { success: true }
+    })
+    
+    return reset()
+  })
 }
+

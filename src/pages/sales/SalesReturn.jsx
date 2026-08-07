@@ -7,6 +7,7 @@ export default function SalesReturn() {
   const [searchResults, setSearchResults] = useState([])
   const [selectedInvoice, setSelectedInvoice] = useState(null)
   const [returnItems, setReturnItems] = useState([])
+  const [returnDiscount, setReturnDiscount] = useState(0) // User can add discount on return
   const [submitting, setSubmitting] = useState(false)
   const [msg, setMsg] = useState(null)
   const [returns, setReturns] = useState([])
@@ -25,22 +26,35 @@ export default function SalesReturn() {
     const full = await api.sales.getInvoiceById(inv.id)
     const invoice = full || inv
     setSelectedInvoice(invoice)
+    
+    // Use remaining quantities if available (for partial returns)
     setReturnItems((invoice.items || []).map(item => ({ 
       ...item, 
       return_qty: 0, 
       reason: 'Customer Request', 
-      max_qty: Number(item.qty) || 0 
+      max_qty: Number(item.remaining_qty || item.qty) || 0 // Use remaining_qty if exists
     })))
+    
+    // Auto-suggest discount based on original invoice (user can change)
+    const originalDiscountPercent = invoice.sub_total > 0 ? ((invoice.sub_total - invoice.grand_total) / invoice.sub_total) * 100 : 0
+    setReturnDiscount(Math.round(originalDiscountPercent * 100) / 100)
   }
 
   const updateItem = (idx, field, value) => {
     const updated = [...returnItems]; updated[idx][field] = value; setReturnItems(updated)
   }
 
-  const totalReturn = returnItems.reduce((s, item) => {
+  // Calculate return sub-total (before discount)
+  const returnSubTotal = returnItems.reduce((s, item) => {
     const qty = parseFloat(item.return_qty) || 0
-    return s + qty * (item.sale_price || 0) * (1 - (item.discount_percent || 0) / 100)
+    return s + qty * (item.sale_price || 0)
   }, 0)
+  
+  // Calculate discount amount
+  const discountAmount = returnSubTotal * (parseFloat(returnDiscount) || 0) / 100
+  
+  // Final return total after discount
+  const totalReturn = returnSubTotal - discountAmount
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -52,18 +66,18 @@ export default function SalesReturn() {
       await api.sales.createReturn({ 
         sale_id: selectedInvoice.id, 
         customer_id: selectedInvoice.customer_id, 
-        total: totalReturn, 
+        total: totalReturn, // Final amount after user-provided discount
         items: items.map(i => ({ 
           product_id: i.product_id, 
           batch_id: i.batch_id, 
-          purchase_item_id: i.purchase_item_id, // Include purchase_item_id for stock return
+          purchase_item_id: i.purchase_item_id,
           qty: parseFloat(i.return_qty), 
           price: i.sale_price, 
-          total: parseFloat(i.return_qty) * i.sale_price * (1 - (i.discount_percent||0)/100) 
+          total: parseFloat(i.return_qty) * i.sale_price // Original price (discount applied at invoice level)
         })) 
       })
       setMsg({ type: 'success', text: 'Return processed successfully.' })
-      setSelectedInvoice(null); setReturnItems([]); setInvoiceSearch('')
+      setSelectedInvoice(null); setReturnItems([]); setInvoiceSearch(''); setReturnDiscount(0)
       api.sales.getReturns().then(d => setReturns(Array.isArray(d) ? d : []))
     } catch (err) { setMsg({ type: 'error', text: 'Error: ' + err.message }) }
     finally { setSubmitting(false) }
@@ -120,35 +134,115 @@ export default function SalesReturn() {
                 </div>
               </div>
               {selectedInvoice && <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                <p className="text-[12px] font-bold text-[#003c90]">{selectedInvoice.invoice_no}</p>
-                <p className="text-[11px] text-[#737784]">Customer: {selectedInvoice.customer_name || 'Walk-in'}</p>
-                <p className="text-[11px] text-[#737784]">Total: PKR {fmt(selectedInvoice.grand_total)}</p>
+                <p className="text-[12px] font-bold text-[#003c90] mb-1">{selectedInvoice.invoice_no}</p>
+                <div className="grid grid-cols-2 gap-2 text-[11px]">
+                  <div>
+                    <p className="text-[#737784]">Customer: <span className="font-semibold text-[#191c1e]">{selectedInvoice.customer_name || 'Walk-in'}</span></p>
+                    <p className="text-[#737784]">
+                      {selectedInvoice.remaining_sub_total !== undefined ? (
+                        <>Remaining Sub Total: <span className="font-mono font-semibold text-[#191c1e]">PKR {fmt(selectedInvoice.remaining_sub_total || 0)}</span></>
+                      ) : (
+                        <>Sub Total: <span className="font-mono font-semibold text-[#191c1e]">PKR {fmt(selectedInvoice.sub_total || 0)}</span></>
+                      )}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[#737784]">
+                      {selectedInvoice.remaining_discount !== undefined ? (
+                        <>Remaining Discount: <span className="font-mono font-semibold text-red-600">PKR {fmt(selectedInvoice.remaining_discount || 0)}</span></>
+                      ) : (
+                        <>Original Discount: <span className="font-mono font-semibold text-red-600">PKR {fmt((selectedInvoice.sub_total || 0) - (selectedInvoice.grand_total || 0))}</span></>
+                      )}
+                    </p>
+                    <p className="text-[#737784]">
+                      {selectedInvoice.remaining_grand_total !== undefined ? (
+                        <>Remaining Total: <span className="font-mono font-bold text-green-600">PKR {fmt(selectedInvoice.remaining_grand_total)}</span></>
+                      ) : (
+                        <>Grand Total: <span className="font-mono font-bold text-green-600">PKR {fmt(selectedInvoice.grand_total)}</span></>
+                      )}
+                    </p>
+                  </div>
+                </div>
+                {selectedInvoice.remaining_sub_total !== undefined && selectedInvoice.remaining_sub_total < selectedInvoice.sub_total && (
+                  <div className="mt-2 pt-2 border-t border-blue-300">
+                    <p className="text-[10px] text-[#737784]">
+                      ℹ️ Some items already returned. Showing remaining returnable amounts.
+                    </p>
+                  </div>
+                )}
               </div>}
             </div>
             {selectedInvoice && returnItems.length > 0 && <form onSubmit={handleSubmit}>
               <div className="border border-[#c3c6d5] rounded-lg overflow-hidden">
                 <table className="w-full text-left border-collapse">
                   <thead><tr className="bg-[#f2f4f6] border-b border-[#c3c6d5]">
-                    {['Product','Orig Qty','Price','Return Qty','Return Amt'].map(h => <th key={h} className={`px-3 py-2.5 text-[11px] font-bold text-[#434653] uppercase tracking-wider ${['Orig Qty','Price','Return Qty','Return Amt'].includes(h) ? 'text-right' : ''}`}>{h}</th>)}
+                    {['Product','Remaining Qty','Price','Return Qty','Return Amt'].map(h => <th key={h} className={`px-3 py-2.5 text-[11px] font-bold text-[#434653] uppercase tracking-wider ${['Remaining Qty','Price','Return Qty','Return Amt'].includes(h) ? 'text-right' : ''}`}>{h}</th>)}
                   </tr></thead>
                   <tbody className="divide-y divide-[#eceef0]">
                     {returnItems.map((item, idx) => {
-                      const retAmt = (parseFloat(item.return_qty)||0) * (item.sale_price||0) * (1-(item.discount_percent||0)/100)
+                      const retAmt = (parseFloat(item.return_qty)||0) * (item.sale_price||0)
                       return <tr key={idx} className="hover:bg-[#f7f9fb]">
-                        <td className="px-3 py-2 text-[12px] font-semibold">{item.product_name}</td>
-                        <td className="px-3 py-2 text-right text-[12px] font-mono">{item.max_qty}</td>
+                        <td className="px-3 py-2">
+                          <div className="text-[12px] font-semibold">{item.product_name}</div>
+                          {item.returned_qty > 0 && (
+                            <div className="text-[10px] text-[#737784]">
+                              (Original: {item.original_qty}, Already returned: {item.returned_qty})
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-bold font-mono ${item.returned_qty > 0 ? 'bg-amber-100 text-amber-700' : 'bg-blue-50 text-[#003c90]'}`}>
+                            {item.max_qty}
+                          </span>
+                        </td>
                         <td className="px-3 py-2 text-right text-[12px] font-mono">{fmt(item.sale_price)}</td>
                         <td className="px-3 py-2 text-right"><input type="number" value={item.return_qty} min="0" max={item.max_qty}
                           onChange={e => updateItem(idx, 'return_qty', Math.min(parseFloat(e.target.value)||0, item.max_qty))}
                           className="w-20 px-2 py-1 text-right border border-[#c3c6d5] rounded text-[12px] focus:border-[#003c90]" /></td>
-                        <td className="px-3 py-2 text-right text-[12px] font-mono font-bold text-red-600">{retAmt > 0 ? `PKR ${fmt(retAmt)}` : '-'}</td>
+                        <td className="px-3 py-2 text-right text-[12px] font-mono font-bold text-[#003c90]">{retAmt > 0 ? `PKR ${fmt(retAmt)}` : '-'}</td>
                       </tr>
                     })}
                   </tbody>
+                  <tfoot>
+                    <tr className="bg-[#f7f9fb] border-t-2 border-[#c3c6d5]">
+                      <td colSpan="4" className="px-3 py-2 text-right text-[12px] font-semibold text-[#434653]">Sub-Total (before discount):</td>
+                      <td className="px-3 py-2 text-right text-[14px] font-mono font-bold text-[#003c90]">PKR {fmt(returnSubTotal)}</td>
+                    </tr>
+                    <tr className="bg-[#f7f9fb]">
+                      <td colSpan="4" className="px-3 py-2 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <label className="text-[12px] font-semibold text-[#434653]">Discount %:</label>
+                          <input 
+                            type="number" 
+                            value={returnDiscount} 
+                            onChange={e => setReturnDiscount(Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)))}
+                            min="0" 
+                            max="100" 
+                            step="0.01"
+                            className="w-24 px-2 py-1 text-right border border-[#c3c6d5] rounded text-[12px] focus:border-[#003c90]"
+                          />
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 text-right text-[13px] font-mono font-bold text-red-600">- PKR {fmt(discountAmount)}</td>
+                    </tr>
+                    <tr className="bg-[#003c90]/5 border-t-2 border-[#003c90]">
+                      <td colSpan="4" className="px-3 py-2.5 text-right text-[13px] font-bold text-[#003c90]">FINAL RETURN AMOUNT:</td>
+                      <td className="px-3 py-2.5 text-right text-[16px] font-mono font-bold text-red-700">PKR {fmt(totalReturn)}</td>
+                    </tr>
+                  </tfoot>
                 </table>
               </div>
               <div className="flex items-center justify-between mt-4">
-                <div className="px-4 py-3 bg-red-50 border border-red-200 rounded-lg"><p className="text-[11px] font-semibold text-[#737784]">Total Return Amount</p><p className="text-[20px] font-bold text-red-700 font-mono">PKR {fmt(totalReturn)}</p></div>
+                <div className="space-y-2">
+                  <div className="px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-[10px] font-semibold text-[#737784] uppercase">Return Sub-Total</p>
+                    <p className="text-[16px] font-bold text-[#003c90] font-mono">PKR {fmt(returnSubTotal)}</p>
+                  </div>
+                  <div className="px-4 py-2 bg-red-50 border border-red-200 rounded-lg">
+                    <p className="text-[10px] font-semibold text-[#737784] uppercase">After {returnDiscount}% Discount</p>
+                    <p className="text-[20px] font-bold text-red-700 font-mono">PKR {fmt(totalReturn)}</p>
+                  </div>
+                </div>
                 <Btn type="submit" variant="danger" size="lg" disabled={submitting || totalReturn === 0}>
                   {submitting && <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
                   <span className="material-symbols-outlined text-[18px]">undo</span>Process Return

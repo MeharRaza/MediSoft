@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { api } from '../../lib/api'
 import { PageHeader, Card, Btn, SearchInput, fmt } from '../../components/ui'
 
@@ -7,32 +7,141 @@ const emptyForm = () => ({ barcode: '', name: '', generic_name: '', category_id:
 export default function Products() {
   const [products, setProducts]     = useState([])
   const [categories, setCategories] = useState([])
-  const [loading, setLoading]       = useState(true)
+  const [loading, setLoading]       = useState(false)
   const [search, setSearch]         = useState('')
   const [form, setForm]             = useState(emptyForm())
   const [editingId, setEditingId]   = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const [msg, setMsg]               = useState(null)
   const [newCatName, setNewCatName] = useState('')
+  const [hasSearched, setHasSearched] = useState(false)
+  
+  // Autocomplete dropdown
+  const [suggestions, setSuggestions] = useState([])
+  const [showDropdown, setShowDropdown] = useState(false)
+  const [selectedIndex, setSelectedIndex] = useState(-1)
+  const searchRef = useRef(null)
+  const dropdownRef = useRef(null)
+
+  // Auto-scroll selected item into view
+  useEffect(() => {
+    if (selectedIndex >= 0 && dropdownRef.current) {
+      const selectedElement = dropdownRef.current.children[selectedIndex]
+      if (selectedElement) {
+        selectedElement.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      }
+    }
+  }, [selectedIndex])
 
   useEffect(() => {
-    fetchProducts()
+    // console.clear() // Commented to see all logs
+    console.log('🔧 [Products Page] Mounting - NOT loading products automatically')
+    console.log('   Initial state: products=[], hasSearched=false')
+    
+    // CRITICAL: Ensure products is empty on mount
+    setProducts([])
+    setHasSearched(false)
+    
+    // Only load categories
     api.inventory.getCategories().then(c => setCategories(Array.isArray(c) ? c : []))
   }, [])
 
-  const fetchProducts = async () => {
+  // Fetch suggestions for autocomplete (with loadAll flag to get all products)
+  const fetchSuggestions = async (query) => {
+    if (!query || query.length < 2) {
+      setSuggestions([])
+      setShowDropdown(false)
+      return
+    }
+    
+    try {
+      const results = await api.inventory.getProducts({ search: query, loadAll: true })
+      setSuggestions(results.slice(0, 10)) // Show top 10 results
+      setShowDropdown(results.length > 0)
+    } catch (err) {
+      console.error('Error fetching suggestions:', err)
+    }
+  }
+
+  const handleSearchChange = (value) => {
+    setSearch(value)
+    fetchSuggestions(value)
+    setSelectedIndex(-1)
+  }
+
+  const handleSelectSuggestion = (product) => {
+    setSearch(product.name)
+    setSuggestions([])
+    setShowDropdown(false)
+    // Trigger search with selected product name
+    fetchProductsWithQuery(product.name)
+  }
+
+  const fetchProductsWithQuery = async (query) => {
     setLoading(true)
+    setHasSearched(true)
     try { 
-      const d = await api.inventory.getProducts({ search: search||undefined, is_active: 1 }) // Only show active products
-      console.log('📦 Products fetched:', d.slice(0, 3)) // Show first 3 products
-      console.log('🔍 Check company_name field:', d.map(p => ({ id: p.id, name: p.name, company_name: p.company_name, generic_name: p.generic_name })))
+      // Don't filter by is_active when searching - show all products (active + inactive)
+      const d = await api.inventory.getProducts({ search: query || undefined })
+      console.log('📦 Products fetched:', d.length, 'products')
+      if (d.length > 0) {
+        console.log('📋 First product:', { id: d[0].id, name: d[0].name, stock: d[0].stock, is_active: d[0].is_active })
+      }
       setProducts(Array.isArray(d) ? d : [])
     }
-    catch (e) { setMsg({ type: 'error', text: e.message }) }
+    catch (e) { 
+      console.error('❌ Fetch error:', e)
+      setMsg({ type: 'error', text: e.message }) 
+    }
     finally { setLoading(false) }
   }
 
-  const handleSearch = () => fetchProducts()
+  const fetchProducts = async () => {
+    fetchProductsWithQuery(search)
+  }
+
+  const handleSearch = () => {
+    setShowDropdown(false)
+    fetchProducts()
+  }
+
+  const handleSearchKeyDown = (e) => {
+    console.log('🔑 Key pressed:', e.key, 'Dropdown visible:', showDropdown, 'Suggestions:', suggestions.length)
+    
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      const newIndex = Math.min(selectedIndex + 1, suggestions.length - 1)
+      console.log('⬇️ Arrow Down - Index:', selectedIndex, '→', newIndex)
+      setSelectedIndex(newIndex)
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      const newIndex = Math.max(selectedIndex - 1, -1)
+      console.log('⬆️ Arrow Up - Index:', selectedIndex, '→', newIndex)
+      setSelectedIndex(newIndex)
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      if (selectedIndex >= 0 && suggestions[selectedIndex]) {
+        console.log('✅ Enter - Selecting:', suggestions[selectedIndex].name)
+        handleSelectSuggestion(suggestions[selectedIndex])
+      } else {
+        console.log('🔍 Enter - Direct search')
+        handleSearch()
+      }
+    } else if (e.key === 'Escape') {
+      console.log('❌ Escape - Closing dropdown')
+      setShowDropdown(false)
+    }
+  }
+
+  const handleRefresh = () => {
+    // Clear everything and reset to empty state
+    setSearch('')
+    setProducts([])
+    setHasSearched(false)
+    setSuggestions([])
+    setShowDropdown(false)
+    setMsg(null)
+  }
 
   const handleSave = async () => {
     if (!form.name.trim()) return setMsg({ type: 'error', text: 'Product name is required.' })
@@ -54,7 +163,11 @@ export default function Products() {
     try {
       if (editingId) { await api.inventory.updateProduct({ id: editingId, ...payload }); setMsg({ type: 'success', text: 'Product updated.' }) }
       else { await api.inventory.createProduct(payload); setMsg({ type: 'success', text: 'Product saved with batch.' }) }
-      setForm(emptyForm()); setEditingId(null); fetchProducts()
+      setForm(emptyForm()); setEditingId(null); 
+      // Only refresh if user had already searched
+      if (hasSearched) {
+        fetchProducts()
+      }
     } catch (err) { setMsg({ type: 'error', text: err.message }) }
     finally { setSubmitting(false) }
   }
@@ -89,7 +202,10 @@ export default function Products() {
       const result = await api.inventory.deleteProduct(p.id)
       console.log('✅ Delete result:', result)
       setMsg({ type: 'success', text: 'Product deleted successfully.' })
-      fetchProducts()
+      // Only refresh if user had searched
+      if (hasSearched) {
+        fetchProducts()
+      }
     }
     catch (err) { 
       console.error('❌ Delete error:', err)
@@ -104,14 +220,26 @@ export default function Products() {
     api.inventory.getCategories().then(c => setCategories(Array.isArray(c) ? c : []))
   }
 
-  const filtered = products.filter(p => !search || (p.name||'').toLowerCase().includes(search.toLowerCase()) || (p.barcode||'').includes(search) || (p.generic_name||'').toLowerCase().includes(search.toLowerCase()))
+  // Only filter if user has searched
+  const filtered = hasSearched 
+    ? products.filter(p => !search || (p.name||'').toLowerCase().includes(search.toLowerCase()) || (p.barcode||'').includes(search) || (p.generic_name||'').toLowerCase().includes(search.toLowerCase()))
+    : []
+  
+  // Debug every render
+  console.log('🔍 [Products Page] RENDER:', {
+    hasSearched,
+    productsLength: products.length,
+    filteredLength: filtered.length,
+    loading,
+    search
+  })
 
   const setF = (field, value) => setForm(f => ({ ...f, [field]: value }))
 
   return (
     <div className="flex flex-col h-full bg-[#f7f9fb]">
       <PageHeader title="Product Definition" subtitle="Create and manage pharmacy products" 
-        actions={<Btn variant="outline" onClick={fetchProducts} disabled={loading}>
+        actions={hasSearched && <Btn variant="outline" onClick={handleRefresh} disabled={loading}>
           {loading && <span className="w-4 h-4 border-2 border-[#003c90]/30 border-t-[#003c90] rounded-full animate-spin" />}
           <span className="material-symbols-outlined text-[16px]">refresh</span>Refresh
         </Btn>} 
@@ -175,15 +303,59 @@ export default function Products() {
         {/* Search + Table */}
         <Card className="flex flex-col flex-1">
           <div className="px-4 py-3 border-b border-[#c3c6d5] flex items-center gap-3">
-            <SearchInput value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by product name, barcode, company..." className="w-80" />
+            <div className="relative w-80" ref={searchRef}>
+              <SearchInput 
+                value={search} 
+                onChange={e => handleSearchChange(e.target.value)} 
+                onKeyDown={handleSearchKeyDown}
+                placeholder="Search by product name, barcode, company..." 
+                className="w-full" 
+              />
+              {/* Autocomplete Dropdown */}
+              {showDropdown && suggestions.length > 0 && (
+                <div ref={dropdownRef} className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#c3c6d5] rounded-lg shadow-lg max-h-64 overflow-y-auto z-50">
+                  {suggestions.map((product, idx) => (
+                    <button
+                      key={product.id}
+                      onClick={() => handleSelectSuggestion(product)}
+                      className={`w-full px-3 py-2 text-left hover:bg-[#f7f9fb] border-b border-[#eceef0] last:border-b-0 transition-colors ${
+                        idx === selectedIndex ? 'bg-[#e3f2fd]' : ''
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-[12px] font-semibold text-[#003c90]">{product.name}</p>
+                          <p className="text-[10px] text-[#737784]">{product.company_name || product.generic_name || 'No company'}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[11px] font-mono text-[#737784]">{product.barcode || 'No barcode'}</p>
+                          <p className={`text-[11px] font-bold ${product.stock > 0 ? 'text-[#006a6a]' : 'text-[#ba1a1a]'}`}>
+                            Stock: {product.stock || 0}
+                          </p>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <Btn variant="primary" size="sm" onClick={handleSearch}><span className="material-symbols-outlined text-[14px]">search</span>Search</Btn>
-            <Btn variant="outline" size="sm" onClick={fetchProducts} disabled={loading}>
-              {loading && <span className="w-4 h-4 border-2 border-[#003c90]/30 border-t-[#003c90] rounded-full animate-spin" />}
-              <span className="material-symbols-outlined text-[14px]">refresh</span>Refresh
-            </Btn>
+            {hasSearched && (
+              <Btn variant="outline" size="sm" onClick={handleRefresh} disabled={loading}>
+                {loading && <span className="w-4 h-4 border-2 border-[#003c90]/30 border-t-[#003c90] rounded-full animate-spin" />}
+                <span className="material-symbols-outlined text-[14px]">refresh</span>Clear
+              </Btn>
+            )}
           </div>
           <div className="overflow-auto flex-1">
             {loading ? <div className="flex items-center justify-center py-16"><div className="w-8 h-8 border-4 border-[#003c90]/20 border-t-[#003c90] rounded-full animate-spin" /></div> :
+              !hasSearched ? (
+                <div className="flex flex-col items-center justify-center py-20">
+                  <span className="material-symbols-outlined text-[64px] text-[#c3c6d5] mb-4">search</span>
+                  <p className="text-[14px] font-semibold text-[#434653] mb-2">Search for Products</p>
+                  <p className="text-[12px] text-[#737784]">Enter product name, barcode, or company and click Search</p>
+                </div>
+              ) :
               <table className="w-full text-left border-collapse table-dense">
                 <thead><tr className="bg-[#f2f4f6] border-b border-[#c3c6d5] sticky top-0">{['PID','Barcode','Product Name','Category','Company','Pcs/Pk','Stock','Sale','Trade','Actions'].map(h => <th key={h} className={`px-3 py-2 text-[10px] font-bold text-[#434653] uppercase tracking-wider ${['Pcs/Pk','Stock','Sale','Trade'].includes(h)?'text-right':''}`}>{h}</th>)}</tr></thead>
                 <tbody className="divide-y divide-[#eceef0]">
@@ -213,7 +385,10 @@ export default function Products() {
                               api.inventory.deleteProduct(p.id)
                                 .then(() => {
                                   setMsg({ type: 'success', text: 'Product deleted successfully.' })
-                                  fetchProducts()
+                                  // Only refresh if user had searched
+                                  if (hasSearched) {
+                                    fetchProducts()
+                                  }
                                 })
                                 .catch(err => setMsg({ type: 'error', text: err.message }))
                             }} 

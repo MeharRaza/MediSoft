@@ -105,7 +105,13 @@ module.exports = (ipcMain) => {
     return { accounts, ledger }
   })
 
-  ipcMain.handle('reports:getExpiryReport', () => {
+  ipcMain.handle('reports:getExpiryReport', (_, filters = {}) => {
+    // Return empty if no search (unless loadAll flag)
+    if (!filters.search && !filters.loadAll) {
+      console.log('⚠️ No search query provided - returning empty arrays')
+      return { expired: [], expiring30: [], expiring90: [] }
+    }
+    
     const today = new Date()
     const todayStr = today.toISOString().split('T')[0]
     const d30  = new Date(); d30.setDate(d30.getDate() + 30)
@@ -148,8 +154,8 @@ module.exports = (ipcMain) => {
     const d30Timestamp = d30.getTime()
     const d180Timestamp = d180.getTime()
     
-    // Get all active purchase items with expiry dates
-    const allItems = db.prepare(`
+    // Build query with optional search filter
+    let query = `
       SELECT pi.*, p.name as product_name, pu.created_at as purchase_date,
         pu.invoice_no as batch_no,
         (pi.qty - pi.qty_sold) as qty,
@@ -159,9 +165,20 @@ module.exports = (ipcMain) => {
       JOIN purchases pu ON pu.id=pi.purchase_id
       WHERE (pi.qty - pi.qty_sold) > 0 
       AND p.is_active = 1
-      AND pi.expiry_date IS NOT NULL
-      ORDER BY pi.expiry_date, pu.created_at
-    `).all()
+      AND pi.expiry_date IS NOT NULL`
+    
+    const params = []
+    
+    // Add search filter if provided
+    if (filters.search) {
+      query += ` AND (p.name LIKE ? OR pu.invoice_no LIKE ?)`
+      params.push(`%${filters.search}%`, `%${filters.search}%`)
+    }
+    
+    query += ` ORDER BY pi.expiry_date, pu.created_at`
+    
+    // Get all active purchase items with expiry dates
+    const allItems = db.prepare(query).all(...params)
     
     console.log(`📦 Total items with expiry dates: ${allItems.length}`)
     

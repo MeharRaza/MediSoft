@@ -73,14 +73,15 @@ export default function Dashboard() {
 
       {/* Stat Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Today's Sales" value={`PKR ${fmt(stats?.todaySales)}`} icon="payments" color="blue" sub={`${stats?.todaySalesCount} invoices`} />
+        <StatCard label="Today's Net Sales" value={`PKR ${fmt(stats?.todaySales)}`} icon="payments" color="blue" sub={`${stats?.todaySalesCount} invoices`} />
         <StatCard label="Net Profit Today" value={`PKR ${fmt(stats?.profitToday)}`} icon="monitoring" color="green" sub="Estimated" />
         <StatCard label="Low Stock Items" value={stats?.lowStock} icon="warning" color="red" sub="Need reorder" />
         <StatCard label="Expiry Alerts" value={stats?.expiryAlerts} icon="event_busy" color="amber" sub="Within 6 months" />
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-4 gap-4">
         <StatCard label="Today's Purchase" value={`PKR ${fmt(stats?.todayPurchase)}`} icon="shopping_cart" color="teal" />
+        <StatCard label="Sales Returns" value={`PKR ${fmt(stats?.todayReturns || 0)}`} icon="keyboard_return" color="red" sub={`${stats?.todayReturnsCount || 0} returns`} />
         <StatCard label="Pending Recovery" value={`PKR ${fmt(stats?.pendingRecovery)}`} icon="currency_exchange" color="amber" sub="Customer dues" />
         <div className="bg-white border border-[#c3c6d5] rounded-lg p-4 flex items-center justify-between">
           <div>

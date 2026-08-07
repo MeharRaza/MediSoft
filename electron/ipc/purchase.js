@@ -104,15 +104,37 @@ module.exports = (ipcMain) => {
   })
 
   ipcMain.handle('purchase:getPurchases', (_, filters = {}) => {
+    console.log('🔍 getPurchases called with filters:', JSON.stringify(filters))
+    
     let q = `SELECT p.*, s.name as supplier_name FROM purchases p
       LEFT JOIN suppliers s ON s.id=p.supplier_id WHERE 1=1`
     const params = []
+    
     if (filters.from_date) { q += ' AND date(p.created_at)>=?'; params.push(filters.from_date) }
     if (filters.to_date)   { q += ' AND date(p.created_at)<=?'; params.push(filters.to_date) }
     if (filters.supplier_id) { q += ' AND p.supplier_id=?'; params.push(filters.supplier_id) }
-    if (filters.search)    { q += ' AND (p.invoice_no LIKE ? OR s.name LIKE ?)'; params.push(`%${filters.search}%`, `%${filters.search}%`) }
+    
+    // Enhanced search: invoice#, supplier name, OR product name
+    if (filters.search) {
+      q += ` AND (
+        p.invoice_no LIKE ? 
+        OR s.name LIKE ? 
+        OR EXISTS (
+          SELECT 1 FROM purchase_items pi
+          JOIN products pr ON pr.id = pi.product_id
+          WHERE pi.purchase_id = p.id 
+          AND pr.name LIKE ?
+        )
+      )`
+      const searchPattern = `%${filters.search}%`
+      params.push(searchPattern, searchPattern, searchPattern)
+      console.log(`🔍 Searching purchases by: invoice#, supplier, or product name with pattern "${searchPattern}"`)
+    }
+    
     q += ' ORDER BY p.id DESC'
-    return db.prepare(q).all(...params)
+    const results = db.prepare(q).all(...params)
+    console.log(`✅ Found ${results.length} purchase(s)`)
+    return results
   })
 
   ipcMain.handle('purchase:getPurchaseById', (_, id) => {

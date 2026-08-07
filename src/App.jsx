@@ -1,9 +1,8 @@
-import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
-import { useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './store/authStore'
 import Layout from './components/Layout'
 import UpdateNotifier from './components/UpdateNotifier'
+import TaskSwitcher from './components/TaskSwitcher'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import FastBilling from './pages/sales/FastBilling'
@@ -36,106 +35,18 @@ import CompanySettings from './pages/settings/CompanySettings'
 import UserManagement from './pages/settings/UserManagement'
 import BranchManagement from './pages/settings/BranchManagement'
 
-// ─── NAVIGATION HISTORY TRACKER (CTRL+TAB) ──────────────────────
-// Tracks page navigation history for Ctrl+Tab cycle navigation
-function NavigationHistory() {
-  const location = useLocation()
-  const navigate = useNavigate()
-  const historyRef = useRef([])
-  const currentIndexRef = useRef(0)
-  const isNavigatingWithCtrlTabRef = useRef(false) // Flag to track Ctrl+Tab navigation
-
-  // Track navigation history
-  useEffect(() => {
-    const currentPath = location.pathname
-    
-    // Skip adding to history if we're navigating with Ctrl+Tab
-    if (isNavigatingWithCtrlTabRef.current) {
-      isNavigatingWithCtrlTabRef.current = false
-      return
-    }
-    
-    // Check if page already exists in history
-    const existingIndex = historyRef.current.indexOf(currentPath)
-    
-    if (existingIndex !== -1) {
-      // Page already in history - just update current index
-      currentIndexRef.current = existingIndex
-    } else {
-      // New page - add to history
-      historyRef.current.push(currentPath)
-      currentIndexRef.current = historyRef.current.length - 1
-    }
-    
-    console.log('📚 History:', historyRef.current.map((p, i) => i === currentIndexRef.current ? `[${p}]` : p))
-  }, [location])
-
-  // Ctrl+Tab navigation - Cycle through history
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      // Ctrl+Tab → Cycle to previous page in history
-      if (e.ctrlKey && e.key === 'Tab') {
-        e.preventDefault()
-        
-        if (historyRef.current.length > 1) {
-          // Move to previous page (with wrap around)
-          currentIndexRef.current = currentIndexRef.current - 1
-          
-          // Wrap around to end if at beginning
-          if (currentIndexRef.current < 0) {
-            currentIndexRef.current = historyRef.current.length - 1
-          }
-          
-          const targetPath = historyRef.current[currentIndexRef.current]
-          
-          // Set flag before navigating
-          isNavigatingWithCtrlTabRef.current = true
-          
-          console.log('🔄 Ctrl+Tab: Cycling to', targetPath)
-          console.log('📍 Index:', currentIndexRef.current, 'of', historyRef.current.length - 1)
-          
-          navigate(targetPath)
-        } else {
-          console.log('⚠️ Only 1 page in history')
-        }
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [navigate])
-
-  return null
-}
-
-// ─── GLOBAL KEYBOARD SHORTCUTS (ALT-BASED MENU NAVIGATION) ──────────────────────
-// Alt key activates sidebar menu, then letter keys navigate
-function KeyboardShortcuts() {
-  const navigate = useNavigate()
-
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      // Alt-based navigation will be implemented here
-      // For now, no shortcuts
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [navigate])
-
-  return null
-}
+// ─── REMOVED OLD NAVIGATION HISTORY ──────────────────────
+// Replaced with new TaskSwitcher component
 
 function PrivateRoute({ children }) {
   const user = useAuthStore(s => s.user)
   return user ? children : <Navigate to="/login" replace />
 }
 
-function LayoutWithShortcuts() {
+function LayoutWithTaskSwitcher() {
   return (
     <>
-      <NavigationHistory />
-      <KeyboardShortcuts />
+      <TaskSwitcher />
       <Layout />
     </>
   )
@@ -147,7 +58,7 @@ export default function App() {
       <UpdateNotifier />
       <Routes>
         <Route path="/login" element={<Login />} />
-        <Route path="/" element={<PrivateRoute><LayoutWithShortcuts /></PrivateRoute>}>
+        <Route path="/" element={<PrivateRoute><LayoutWithTaskSwitcher /></PrivateRoute>}>
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<Dashboard />} />
           {/* Sales */}

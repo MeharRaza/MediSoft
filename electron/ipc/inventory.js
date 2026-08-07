@@ -3,6 +3,8 @@ const db = require('../database')
 module.exports = (ipcMain) => {
 
   ipcMain.handle('inventory:getProducts', (_, filters = {}) => {
+    console.log('🔍 getProducts called with filters:', JSON.stringify(filters))
+    
     let q = `
       SELECT p.id, p.barcode, p.name, p.generic_name as company_name, p.category_id, 
              p.manufacturer_id, p.rack_location, p.pcs_in_pack, p.sale_price, p.trade_price, 
@@ -17,14 +19,29 @@ module.exports = (ipcMain) => {
       LEFT JOIN categories c ON c.id=p.category_id
       WHERE 1=1`
     const params = []
+    
+    // If no search and no loadAll flag, return empty (prevent auto-loading)
+    if (!filters.search && !filters.loadAll) {
+      console.log('⚠️ No search query and no loadAll flag - returning empty array')
+      return []
+    }
+    
     if (filters.search) {
       q += ' AND (p.name LIKE ? OR p.barcode LIKE ? OR p.generic_name LIKE ?)'
-      params.push(`%${filters.search}%`, `%${filters.search}%`, `%${filters.search}%`)
+      const searchPattern = `%${filters.search}%`
+      params.push(searchPattern, searchPattern, searchPattern)
+      console.log(`🔍 Searching products with pattern: "${searchPattern}"`)
     }
     if (filters.category_id) { q += ' AND p.category_id=?'; params.push(filters.category_id) }
     if (filters.is_active !== undefined) { q += ' AND p.is_active=?'; params.push(filters.is_active) }
     q += ' ORDER BY p.name'
-    return db.prepare(q).all(...params)
+    
+    const results = db.prepare(q).all(...params)
+    console.log(`✅ Found ${results.length} products`)
+    if (results.length > 0 && results.length <= 5) {
+      console.log('📋 Results:', results.map(r => ({ id: r.id, name: r.name, stock: r.stock })))
+    }
+    return results
   })
 
   ipcMain.handle('inventory:searchProduct', (_, q) => {
@@ -39,6 +56,17 @@ module.exports = (ipcMain) => {
     
     console.log(`📅 Expiry cutoff date: ${expireZoneDateStr}`)
     
+    // DEBUG: Check is_active status
+    const activeCheck = db.prepare(`
+      SELECT id, name, is_active 
+      FROM products 
+      WHERE LOWER(name) LIKE LOWER(?)
+    `).all(`%${q}%`)
+    console.log(`📊 [DEBUG] All products matching "${q}":`)
+    activeCheck.forEach(p => {
+      console.log(`  - ${p.name}: is_active=${p.is_active}`)
+    })
+    
     const results = db.prepare(`
       SELECT p.id, p.barcode, p.name, p.generic_name as company_name, p.category_id,
              p.rack_location, p.pcs_in_pack, p.sale_price, p.trade_price, p.is_active,
@@ -51,38 +79,35 @@ module.exports = (ipcMain) => {
           WHERE pi.product_id = p.id AND pi.qty > pi.qty_sold
         ), 0) as stock,
         
-        -- Active purchase entry (LATEST - newest entry for latest prices)
+        -- Active purchase entry (OLDEST available batch for FIFO stock management)
         (SELECT pi.id FROM purchase_items pi 
          JOIN purchases pu ON pu.id = pi.purchase_id
          WHERE pi.product_id = p.id 
          AND pi.qty > pi.qty_sold
-         ORDER BY pu.created_at DESC LIMIT 1) as current_purchase_item_id,
+         ORDER BY pu.created_at ASC, pi.expiry_date ASC LIMIT 1) as current_purchase_item_id,
         
         (SELECT pi.expiry_date FROM purchase_items pi 
          JOIN purchases pu ON pu.id = pi.purchase_id
          WHERE pi.product_id = p.id 
          AND pi.qty > pi.qty_sold
-         ORDER BY pu.created_at DESC LIMIT 1) as current_expiry,
+         ORDER BY pu.created_at ASC, pi.expiry_date ASC LIMIT 1) as current_expiry,
         
-        -- LATEST prices (PER BOX from purchase_items - no conversion needed)
+        -- ALWAYS show LATEST prices (even if that batch is sold out)
         (SELECT pi.sale_price FROM purchase_items pi 
          JOIN purchases pu ON pu.id = pi.purchase_id
-         WHERE pi.product_id = p.id 
-         AND pi.qty > pi.qty_sold
+         WHERE pi.product_id = p.id
          ORDER BY pu.created_at DESC LIMIT 1) as current_sale_price,
         
         (SELECT pi.purchase_price FROM purchase_items pi 
          JOIN purchases pu ON pu.id = pi.purchase_id
-         WHERE pi.product_id = p.id 
-         AND pi.qty > pi.qty_sold
+         WHERE pi.product_id = p.id
          ORDER BY pu.created_at DESC LIMIT 1) as current_purchase_price,
         
-        -- Profit % directly from purchase_items table (stored value - no calculation)
+        -- ALWAYS show LATEST profit % (even if that batch is sold out)
         (SELECT pi.profit_percent
          FROM purchase_items pi 
          JOIN purchases pu ON pu.id = pi.purchase_id
-         WHERE pi.product_id = p.id 
-         AND pi.qty > pi.qty_sold
+         WHERE pi.product_id = p.id
          ORDER BY pu.created_at DESC LIMIT 1) as profit_percent,
         
         -- Current active purchase entry stock (still FIFO for stock management)
@@ -106,7 +131,7 @@ module.exports = (ipcMain) => {
         
       FROM products p 
       LEFT JOIN categories c ON c.id=p.category_id
-      WHERE p.is_active=1 AND (p.name LIKE ? OR p.barcode LIKE ? OR p.generic_name LIKE ?)
+      WHERE p.is_active=1 AND (LOWER(p.name) LIKE LOWER(?) OR p.barcode LIKE ? OR LOWER(p.generic_name) LIKE LOWER(?))
       ORDER BY p.name LIMIT 20`
     ).all(`%${q}%`, `%${q}%`, `%${q}%`)
     
@@ -178,7 +203,7 @@ module.exports = (ipcMain) => {
       
       // 2. Update LATEST purchase_items entry (so Fast Billing shows updated price)
       const latestPurchaseItem = db.prepare(`
-        SELECT pi.id 
+        SELECT pi.id, pi.purchase_price, pu.gst_tax_percent
         FROM purchase_items pi
         JOIN purchases pu ON pu.id = pi.purchase_id
         WHERE pi.product_id = ?
@@ -187,17 +212,28 @@ module.exports = (ipcMain) => {
       `).get(data.id)
       
       if (latestPurchaseItem) {
-        // Both products and purchase_items now store prices PER BOX
-        // No conversion needed - direct update
+        // Calculate new profit percentage
+        const salePrice = data.sale_price || 0
+        const purchasePrice = data.trade_price || latestPurchaseItem.purchase_price || 0
+        const gstTax = latestPurchaseItem.gst_tax_percent || 0
+        
+        let profitPercent = 0
+        if (salePrice > 0) {
+          profitPercent = ((salePrice - purchasePrice) / salePrice) * 100 - gstTax
+        }
+        
+        // Update both prices and profit percentage
         db.prepare(`
           UPDATE purchase_items 
           SET sale_price = ?, 
-              purchase_price = ?
+              purchase_price = ?,
+              profit_percent = ?
           WHERE id = ?
-        `).run(data.sale_price || 0, data.trade_price || 0, latestPurchaseItem.id)
+        `).run(salePrice, purchasePrice, profitPercent, latestPurchaseItem.id)
         
         console.log(`✅ Updated latest purchase_items (ID: ${latestPurchaseItem.id})`)
-        console.log(`   Per box: ${data.sale_price}`)
+        console.log(`   Sale: ${salePrice}, Purchase: ${purchasePrice}`)
+        console.log(`   Profit %: ${profitPercent.toFixed(2)}%`)
       }
     })
     
@@ -298,10 +334,17 @@ module.exports = (ipcMain) => {
     `).all()
   })
 
-  ipcMain.handle('inventory:getAllBatches', () => {
-    console.log('📦 getAllBatches API called')
+  ipcMain.handle('inventory:getAllBatches', (_, filters = {}) => {
+    console.log('📦 getAllBatches API called with filters:', JSON.stringify(filters))
+    
+    // Return empty if no search (unless loadAll flag)
+    if (!filters.search && !filters.loadAll) {
+      console.log('⚠️ No search query provided - returning empty array')
+      return []
+    }
+    
     try {
-      const batches = db.prepare(`
+      let query = `
         SELECT 
           pi.id,
           pi.product_id,
@@ -319,10 +362,27 @@ module.exports = (ipcMain) => {
         JOIN products p ON p.id = pi.product_id
         JOIN purchases pu ON pu.id = pi.purchase_id
         WHERE pi.qty > pi.qty_sold 
-          AND p.is_active = 1
-        ORDER BY pi.expiry_date ASC
-      `).all()
-      console.log(`✅ Found ${batches.length} batches (active products with stock)`)
+          AND p.is_active = 1`
+      
+      const params = []
+      
+      // Add search filter if provided
+      if (filters.search) {
+        query += ` AND (p.name LIKE ? OR pu.invoice_no LIKE ?)`
+        const searchPattern = `%${filters.search}%`
+        params.push(searchPattern, searchPattern)
+        console.log(`🔍 Searching with pattern: "${searchPattern}"`)
+      }
+      
+      query += ` ORDER BY pi.expiry_date ASC`
+      
+      const batches = db.prepare(query).all(...params)
+      console.log(`✅ Found ${batches.length} batches matching search`)
+      if (batches.length > 0) {
+        console.log('📋 First batch:', batches[0])
+      } else {
+        console.log('❌ No batches found for search:', filters.search)
+      }
       return batches
     } catch (err) {
       console.error('❌ getAllBatches error:', err.message)

@@ -72,7 +72,7 @@ export const api = {
     updateProduct:   (data) => isElectron ? window.api.inventory.updateProduct(data) : Promise.resolve({ success: true }),
     deleteProduct:   (id) => isElectron ? window.api.inventory.deleteProduct(id) : Promise.resolve({ success: true }),
     getBatches:      (id) => isElectron ? window.api.inventory.getBatches(id) : Promise.resolve([]),
-    getAllBatches:   () => isElectron ? window.api.inventory.getAllBatches() : Promise.resolve([]),
+    getAllBatches:   (f) => isElectron ? window.api.inventory.getAllBatches(f) : Promise.resolve([]),
     adjustStock:     (data) => isElectron ? window.api.inventory.adjustStock(data) : Promise.resolve({ success: true }),
     transferStock:   (data) => isElectron ? window.api.inventory.transferStock(data) : Promise.resolve({ success: true }),
     getCategories:   () => isElectron ? window.api.inventory.getCategories() : Promise.resolve(mockData.categories),
@@ -107,7 +107,7 @@ export const api = {
     getStockReport:     (f) => isElectron ? window.api.reports.getStockReport(f) : Promise.resolve({ products: mockData.products, totalValue: 0 }),
     getProfitLoss:      (f) => isElectron ? window.api.reports.getProfitLoss(f) : Promise.resolve({ revenue: 0, cogs: 0, grossProfit: 0, expenses: [], totalExpenses: 0, netProfit: 0 }),
     getAccountsReport:  (f) => isElectron ? window.api.reports.getAccountsReport(f) : Promise.resolve({ accounts: [], ledger: [] }),
-    getExpiryReport:    () => isElectron ? window.api.reports.getExpiryReport() : Promise.resolve({ expired: [], expiring30: [], expiring90: [] }),
+    getExpiryReport:    (f) => isElectron ? window.api.reports.getExpiryReport(f) : Promise.resolve({ expired: [], expiring30: [], expiring90: [] }),
   },
   settings: {
     getUsers:        () => isElectron ? window.api.settings.getUsers() : Promise.resolve([]),

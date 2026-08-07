@@ -58,7 +58,7 @@ contextBridge.exposeInMainWorld('api', {
     updateProduct:   (data) => ipcRenderer.invoke('inventory:updateProduct', data),
     deleteProduct:   (id) => ipcRenderer.invoke('inventory:deleteProduct', id),
     getBatches:      (productId) => ipcRenderer.invoke('inventory:getBatches', productId),
-    getAllBatches:   () => ipcRenderer.invoke('inventory:getAllBatches'),
+    getAllBatches:   (filters) => ipcRenderer.invoke('inventory:getAllBatches', filters),
     adjustStock:     (data) => ipcRenderer.invoke('inventory:adjustStock', data),
     transferStock:   (data) => ipcRenderer.invoke('inventory:transferStock', data),
     getCategories:   () => ipcRenderer.invoke('inventory:getCategories'),
@@ -97,7 +97,7 @@ contextBridge.exposeInMainWorld('api', {
     getStockReport:     (filters) => ipcRenderer.invoke('reports:getStockReport', filters),
     getProfitLoss:      (filters) => ipcRenderer.invoke('reports:getProfitLoss', filters),
     getAccountsReport:  (filters) => ipcRenderer.invoke('reports:getAccountsReport', filters),
-    getExpiryReport:    () => ipcRenderer.invoke('reports:getExpiryReport'),
+    getExpiryReport:    (filters) => ipcRenderer.invoke('reports:getExpiryReport', filters),
   },
   // Settings
   settings: {
@@ -126,6 +126,10 @@ contextBridge.exposeInMainWorld('api', {
   // Fix utilities
   fix: {
     updatePcsInPack: () => ipcRenderer.invoke('fix:updatePcsInPack'),
+  },
+  // Testing utilities
+  testing: {
+    resetDatabase: () => ipcRenderer.invoke('testing:resetDatabase'),
   },
 })
 

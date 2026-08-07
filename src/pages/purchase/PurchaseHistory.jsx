@@ -18,8 +18,23 @@ export default function PurchaseHistory() {
   useEffect(() => { api.purchase.getSuppliers().then(s => setSuppliers(Array.isArray(s) ? s : [])); fetchPurchases() }, [])
 
   const fetchPurchases = async () => {
+    console.log('🔍 [Frontend] Fetching purchases with filters:', { 
+      from_date: fromDate, 
+      to_date: toDate, 
+      supplier_id: supplierId || undefined, 
+      search: search || undefined 
+    })
     setLoading(true)
-    try { const d = await api.purchase.getPurchases({ from_date: fromDate, to_date: toDate, supplier_id: supplierId||undefined, search: search||undefined }); setPurchases(Array.isArray(d) ? d : []) }
+    try { 
+      const d = await api.purchase.getPurchases({ 
+        from_date: fromDate, 
+        to_date: toDate, 
+        supplier_id: supplierId || undefined, 
+        search: search || undefined 
+      })
+      console.log('✅ [Frontend] Received purchases:', d.length)
+      setPurchases(Array.isArray(d) ? d : []) 
+    }
     catch (e) { setMsg({ type: 'error', text: e.message }) }
     finally { setLoading(false) }
   }
@@ -52,7 +67,20 @@ export default function PurchaseHistory() {
           <Card className="p-4 flex items-center gap-3"><div className="p-2 bg-teal-50 rounded-lg"><span className="material-symbols-outlined text-[20px] text-teal-600">payments</span></div><div><p className="text-[11px] font-semibold text-[#737784] uppercase">Total Amount</p><p className="text-[22px] font-bold text-teal-700">PKR {fmt(totalAmount)}</p></div></Card>
         </div>
         <Card className="p-4"><div className="flex flex-wrap items-end gap-3">
-          <SearchInput value={search} onChange={e => setSearch(e.target.value)} placeholder="Search invoice# or supplier..." className="w-56" />
+          <div className="relative">
+            <SearchInput 
+              value={search} 
+              onChange={e => setSearch(e.target.value)} 
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  fetchPurchases()
+                }
+              }}
+              placeholder="Search invoice#, supplier, or product name..." 
+              className="w-64" 
+            />
+          </div>
           <Input label="From Date" type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} className="w-40" />
           <Input label="To Date"   type="date" value={toDate}   onChange={e => setToDate(e.target.value)}   className="w-40" />
           <Select label="Supplier" value={supplierId} onChange={e => setSupplierId(e.target.value)} options={supplierOpts} className="w-48" />

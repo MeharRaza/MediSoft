@@ -169,6 +169,22 @@ export default function PurchaseEntry() {
     })
   }, [])
 
+  // Keyboard shortcut: Ctrl+S to Save Purchase (case-insensitive)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault()
+        console.log('⌨️ Ctrl+S pressed - Saving purchase...')
+        if (!submitting) {
+          handleSave()
+        }
+      }
+    }
+    
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [submitting]) // Re-attach when submitting state changes
+
   // NEW: Load supplier's companies when supplier changes
   useEffect(() => {
     if (form.supplier_id) {
@@ -488,8 +504,14 @@ export default function PurchaseEntry() {
 
 
   const handleHoldPurchase = () => {
-    // Direct hold without validation - just like Fast Billing
-    // If items exist, hold them (even if empty)
+    // Validate: Don't hold if items array is empty or has only one empty item
+    const hasValidItems = items.length > 1 || (items.length === 1 && items[0].product_id)
+    
+    if (!hasValidItems) {
+      setMsg({ type: 'error', text: 'Cannot hold empty purchase entry. Add at least one product.' })
+      return
+    }
+    
     const purchaseToHold = {
       form: {...form},
       items: [...items],
@@ -508,6 +530,8 @@ export default function PurchaseEntry() {
       setHeldPurchases(updated)
       localStorage.setItem('purchaseEntry_heldPurchases', JSON.stringify(updated))
     }
+    
+    setMsg({ type: 'success', text: 'Purchase held successfully' })
     
     // Reset to new purchase
     setCurrentPurchaseIndex(-1)

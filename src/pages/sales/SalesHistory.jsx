@@ -22,6 +22,7 @@ function statusBadge(status) {
 
 export default function SalesHistory() {
   const [invoices, setInvoices] = useState([])
+  const [returns, setReturns] = useState([])
   const [loading, setLoading]   = useState(true)
   const [search, setSearch]     = useState('')
   const [status, setStatus]     = useState('')
@@ -46,8 +47,13 @@ export default function SalesHistory() {
     try {
       const data = await api.sales.getInvoices({ from_date: fromDate, to_date: toDate, status: status || undefined, search: search || undefined })
       setInvoices(Array.isArray(data) ? data : [])
+      
+      // Also fetch returns for the same period
+      const returnsData = await api.sales.getReturns({ from_date: fromDate, to_date: toDate })
+      setReturns(Array.isArray(returnsData) ? returnsData : [])
     } catch (e) {
       setMsg({ type: 'error', text: 'Failed to load invoices: ' + e.message })
+      console.error('❌ Error loading invoices:', e)
     } finally { setLoading(false) }
   }
 
@@ -125,6 +131,8 @@ export default function SalesHistory() {
 
   const totalAmount  = invoices.reduce((s, i) => s + (Number(i.grand_total) || 0), 0)
   const creditAmount = invoices.filter(i => i.status === 'credit').reduce((s, i) => s + (Number(i.grand_total) - Number(i.paid_amount || 0)), 0)
+  const totalReturns = returns.reduce((s, r) => s + (Number(r.total) || 0), 0)
+  const netSales = totalAmount - totalReturns
 
   const columns = [
     { key: 'invoice_no',    label: 'Invoice #',   mono: true, render: v => <span className="font-mono font-semibold text-[#003c90] text-[12px]">{v}</span> },
@@ -166,9 +174,14 @@ export default function SalesHistory() {
           <button className="ml-auto" onClick={() => setMsg(null)}><span className="material-symbols-outlined text-[16px]">close</span></button>
         </div>}
         <div className="grid grid-cols-3 gap-4">
-          <Card className="p-4 flex items-center gap-3"><div className="p-2 bg-blue-50 rounded-lg"><span className="material-symbols-outlined text-[20px] text-[#003c90]">receipt_long</span></div><div><p className="text-[11px] font-semibold text-[#737784] uppercase tracking-wide">Total Invoices</p><p className="text-[22px] font-bold text-[#003c90]">{invoices.length}</p></div></Card>
-          <Card className="p-4 flex items-center gap-3"><div className="p-2 bg-green-50 rounded-lg"><span className="material-symbols-outlined text-[20px] text-green-600">payments</span></div><div><p className="text-[11px] font-semibold text-[#737784] uppercase tracking-wide">Total Sales</p><p className="text-[22px] font-bold text-green-700">PKR {fmt(totalAmount)}</p></div></Card>
-          <Card className="p-4 flex items-center gap-3"><div className="p-2 bg-blue-50 rounded-lg"><span className="material-symbols-outlined text-[20px] text-blue-600">credit_card</span></div><div><p className="text-[11px] font-semibold text-[#737784] uppercase tracking-wide">Credit Outstanding</p><p className="text-[22px] font-bold text-blue-700">PKR {fmt(creditAmount)}</p></div></Card>
+          <Card className="p-4 flex items-center gap-3"><div className="p-2 bg-blue-50 rounded-lg"><span className="material-symbols-outlined text-[20px] text-[#003c90]">receipt_long</span></div><div><p className="text-[11px] font-semibold text-[#737784] uppercase tracking-wide">Total Invoices</p><p className="text-[22px] font-bold text-[#003c90]">{invoices.length}</p><p className="text-[9px] text-[#737784] mt-0.5">{fromDate === toDate ? `On ${new Date(fromDate).toLocaleDateString('en-GB')}` : `${new Date(fromDate).toLocaleDateString('en-GB')} to ${new Date(toDate).toLocaleDateString('en-GB')}`}</p></div></Card>
+          <Card className="p-4 flex items-center gap-3"><div className="p-2 bg-green-50 rounded-lg"><span className="material-symbols-outlined text-[20px] text-green-600]">payments</span></div><div><p className="text-[11px] font-semibold text-[#737784] uppercase tracking-wide">Gross Sales</p><p className="text-[22px] font-bold text-green-700">PKR {fmt(totalAmount)}</p><p className="text-[9px] text-[#737784] mt-0.5">For selected period</p></div></Card>
+          <Card className="p-4 flex items-center gap-3"><div className="p-2 bg-blue-50 rounded-lg"><span className="material-symbols-outlined text-[20px] text-blue-600">credit_card</span></div><div><p className="text-[11px] font-semibold text-[#737784] uppercase tracking-wide">Credit Outstanding</p><p className="text-[22px] font-bold text-blue-700">PKR {fmt(creditAmount)}</p><p className="text-[9px] text-[#737784] mt-0.5">{invoices.filter(i => i.status === 'credit').length} invoices</p></div></Card>
+        </div>
+        <div className="grid grid-cols-3 gap-4">
+          <Card className="p-4 flex items-center gap-3"><div className="p-2 bg-red-50 rounded-lg"><span className="material-symbols-outlined text-[20px] text-red-600">keyboard_return</span></div><div><p className="text-[11px] font-semibold text-[#737784] uppercase tracking-wide">Sales Returns</p><p className="text-[22px] font-bold text-red-700">PKR {fmt(totalReturns)}</p><p className="text-[9px] text-[#737784] mt-0.5">{returns.length} returns in period</p></div></Card>
+          <Card className="p-4 flex items-center gap-3"><div className="p-2 bg-[#003c90]/10 rounded-lg"><span className="material-symbols-outlined text-[20px] text-[#003c90]">check_circle</span></div><div><p className="text-[11px] font-semibold text-[#737784] uppercase tracking-wide">Net Sales</p><p className="text-[22px] font-bold text-[#003c90]">PKR {fmt(netSales)}</p><p className="text-[9px] text-[#737784] mt-0.5">Gross - Returns</p></div></Card>
+          <Card className="p-4 flex items-center gap-3 opacity-50"><div className="p-2 bg-gray-50 rounded-lg"><span className="material-symbols-outlined text-[20px] text-gray-400">info</span></div><div><p className="text-[11px] font-semibold text-[#737784] uppercase tracking-wide">Filter Status</p><p className="text-[10px] text-[#737784] mt-1 leading-relaxed">{status ? `Status: ${status.toUpperCase()}` : 'All statuses'} {search ? `| Search: "${search}"` : ''}</p></div></Card>
         </div>
         <Card className="p-4">
           <div className="flex flex-wrap items-end gap-3">
@@ -252,6 +265,50 @@ export default function SalesHistory() {
             </div>
           ) : (
             <div className="py-8 text-center text-[13px] text-[#737784]">No items found</div>
+          )}
+
+          {/* Return History Section */}
+          {invoiceDetails?.returns?.length > 0 && (
+            <div className="border border-red-200 rounded-lg overflow-hidden bg-red-50/30">
+              <div className="px-4 py-2 bg-red-100 border-b border-red-200">
+                <h3 className="text-[13px] font-bold text-red-700 flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[16px]">keyboard_return</span>
+                  Return History ({invoiceDetails.returns.length})
+                </h3>
+              </div>
+              <div className="p-3">
+                <div className="space-y-2">
+                  {invoiceDetails.returns.map((ret, idx) => (
+                    <div key={ret.id} className="p-3 bg-white border border-red-200 rounded-lg">
+                      <div className="flex items-start justify-between mb-2">
+                        <div>
+                          <p className="text-[11px] font-bold text-red-700">Return #{ret.id}</p>
+                          <p className="text-[10px] text-[#737784]">{new Date(ret.created_at).toLocaleString()}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[12px] font-bold font-mono text-red-700">- PKR {fmt(ret.total)}</p>
+                        </div>
+                      </div>
+                      <div className="text-[11px] text-[#434653]">
+                        <p className="font-semibold mb-1">Returned Items:</p>
+                        <p className="text-[10px] text-[#737784]">{ret.returned_items || 'No items info'}</p>
+                      </div>
+                      {ret.notes && (
+                        <div className="mt-2 pt-2 border-t border-red-100">
+                          <p className="text-[10px] text-[#737784]"><span className="font-semibold">Notes:</span> {ret.notes}</p>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3 pt-3 border-t border-red-200">
+                  <div className="flex items-center justify-between text-[12px]">
+                    <span className="font-bold text-red-700">Total Returned:</span>
+                    <span className="font-bold font-mono text-red-700">- PKR {fmt(invoiceDetails.returns.reduce((s, r) => s + r.total, 0))}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
           )}
 
           {/* Action Buttons */}

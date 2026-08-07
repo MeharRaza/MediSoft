@@ -145,12 +145,16 @@ export function Modal({ open, onClose, title, children, width = 'max-w-lg' }) {
   )
 }
 
-export function SearchInput({ value, onChange, placeholder = 'Search...', className = '' }) {
+export function SearchInput({ value, onChange, onKeyDown, placeholder = 'Search...', className = '' }) {
   return (
     <div className={`relative ${className}`}>
       <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[#737784] text-[18px]">search</span>
       <input
-        type="text" value={value} onChange={onChange} placeholder={placeholder}
+        type="text" 
+        value={value} 
+        onChange={onChange} 
+        onKeyDown={onKeyDown}
+        placeholder={placeholder}
         className="w-full pl-9 pr-4 py-2 border border-[#c3c6d5] rounded-full bg-white text-[13px] focus:border-[#003c90] transition-colors"
       />
     </div>

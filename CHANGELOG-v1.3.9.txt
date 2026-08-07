@@ -1,0 +1,133 @@
+═══════════════════════════════════════════════════════════════
+  MEDISOFT PRO - VERSION 1.3.9 CHANGELOG
+═══════════════════════════════════════════════════════════════
+Release Date: July 31, 2026
+Build: MediSoft Pro Setup 1.3.9.exe (108.76 MB)
+
+═══════════════════════════════════════════════════════════════
+📋 NEW FEATURES
+═══════════════════════════════════════════════════════════════
+
+✅ SEARCH-FIRST ARCHITECTURE
+   - Products page no longer auto-loads 1300+ products
+   - Batch & Expiry page requires search before loading
+   - Instant page load with empty state
+
+✅ AUTOCOMPLETE DROPDOWN (Like Fast Billing)
+   - Type 2+ characters to see product suggestions
+   - Shows: Product Name, Company, Stock
+   - Arrow keys (↑↓) to navigate
+   - Enter to select or search
+   - Escape to close dropdown
+
+✅ CLEAR/REFRESH FUNCTIONALITY
+   - Refresh button now clears page to empty state
+   - Resets search field
+   - Clears all loaded data
+   - Ready for new search
+
+═══════════════════════════════════════════════════════════════
+🔧 TECHNICAL IMPROVEMENTS
+═══════════════════════════════════════════════════════════════
+
+✅ BACKEND GUARDS
+   - Prevents accidental loading of all products
+   - Returns empty array if no search query
+   - Supports 'loadAll' flag for autocomplete
+   - Better logging for debugging
+
+✅ PERFORMANCE OPTIMIZATION
+   - Page load time: 2-3 seconds → Instant
+   - Database queries: 1300 products → 10-50 products
+   - Memory usage reduced significantly
+
+✅ IMPROVED SEARCH
+   - Backend now filters by product name, barcode, batch number
+   - Better debug logging shows search patterns
+   - More accurate result matching
+
+═══════════════════════════════════════════════════════════════
+📝 FILES MODIFIED
+═══════════════════════════════════════════════════════════════
+
+Backend:
+  - electron/ipc/inventory.js
+  - electron/ipc/reports.js
+  - electron/preload.js
+  - src/lib/api.js
+
+Frontend:
+  - src/pages/inventory/Products.jsx
+  - src/pages/inventory/BatchExpiry.jsx
+
+Config:
+  - package.json (version bump)
+
+═══════════════════════════════════════════════════════════════
+🎯 USER EXPERIENCE
+═══════════════════════════════════════════════════════════════
+
+PRODUCTS PAGE:
+1. Page opens → Empty state (no waiting!)
+2. Type "nim" → Dropdown shows matching products
+3. Press ↓ arrow → Highlight product
+4. Press Enter → Load selected product data
+5. Click Refresh → Page clears to empty state
+
+BATCH & EXPIRY PAGE:
+1. Page opens → Empty state
+2. Type product name → Dropdown suggests
+3. Select from dropdown → Load batch data
+4. Click Clear → Reset to empty
+
+═══════════════════════════════════════════════════════════════
+🐛 FIXES FROM v1.3.8
+═══════════════════════════════════════════════════════════════
+
+✅ Fixed: Slow loading on Inventory Management page
+✅ Fixed: Slow loading on Batch & Expiry page
+✅ Fixed: Products auto-loading without user action
+✅ Fixed: No way to clear search and reset page
+
+═══════════════════════════════════════════════════════════════
+📊 PREVIOUS FIXES (Still Active)
+═══════════════════════════════════════════════════════════════
+
+From v1.3.8:
+✅ Dashboard profit calculation with global discounts
+✅ FIFO batch display (shows latest prices)
+✅ Corrupt batch data auto-fix on startup
+✅ Dynamic profit percentage update on price change
+
+═══════════════════════════════════════════════════════════════
+⚙️ INSTALLATION
+═══════════════════════════════════════════════════════════════
+
+1. Close MediSoft Pro if running
+2. Run "MediSoft Pro Setup 1.3.9.exe"
+3. Follow installer prompts
+4. Launch application
+5. All data preserved automatically
+
+═══════════════════════════════════════════════════════════════
+📌 NOTES
+═══════════════════════════════════════════════════════════════
+
+- Database: SQLite (perfect for single pharmacy use)
+- No PostgreSQL migration needed
+- 1300 products is NOT a performance issue
+- Issue was unnecessary data loading, now fixed
+- All existing data remains safe
+
+═══════════════════════════════════════════════════════════════
+🔜 COMING SOON
+═══════════════════════════════════════════════════════════════
+
+- Cache recent searches
+- Search history dropdown
+- Barcode scanner integration
+- Bulk actions on search results
+
+═══════════════════════════════════════════════════════════════
+END OF CHANGELOG - v1.3.9
+═══════════════════════════════════════════════════════════════

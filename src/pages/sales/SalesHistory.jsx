@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { api } from '../../lib/api'
 import { PageHeader, Card, Btn, Input, Select, Badge, Table, Modal, SearchInput, fmt, today } from '../../components/ui'
 import InvoicePrint from '../../components/InvoicePrint'
@@ -25,6 +25,10 @@ export default function SalesHistory() {
   const [returns, setReturns] = useState([])
   const [loading, setLoading]   = useState(true)
   const [search, setSearch]     = useState('')
+  const [searchSuggestions, setSearchSuggestions] = useState([])
+  const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1)
+  const searchInputRef = useRef()
+  const searchDropdownRef = useRef()
   const [status, setStatus]     = useState('')
   const [fromDate, setFromDate] = useState(todayDate()) // Changed: Default to today
   const [toDate, setToDate]     = useState(todayDate()) // Changed: Default to today
@@ -61,8 +65,101 @@ export default function SalesHistory() {
   
   // Load all products for item history search
   useEffect(() => {
-    api.inventory.getProducts().then(data => setProducts(Array.isArray(data) ? data : []))
+    api.inventory.getProducts({ loadAll: true }).then(data => setProducts(Array.isArray(data) ? data : []))
   }, [])
+  
+  // Real-time search suggestions (invoices + products)
+  useEffect(() => {
+    if (!search || search.length < 2) {
+      setSearchSuggestions([])
+      setSelectedSuggestionIndex(-1)
+      return
+    }
+    
+    const searchLower = search.toLowerCase()
+    
+    // Search in invoices (invoice number, customer name)
+    const invoiceSuggestions = invoices
+      .filter(inv => 
+        inv.invoice_no.toLowerCase().includes(searchLower) ||
+        (inv.customer_name && inv.customer_name.toLowerCase().includes(searchLower))
+      )
+      .slice(0, 5)
+      .map(inv => ({
+        type: 'invoice',
+        display: `${inv.invoice_no} - ${inv.customer_name || 'Walk-in'} - PKR ${fmt(inv.grand_total)}`,
+        value: inv.invoice_no,
+        data: inv
+      }))
+    
+    // Search in products (product name)
+    const productSuggestions = products
+      .filter(p => p.name.toLowerCase().includes(searchLower))
+      .slice(0, 5)
+      .map(p => ({
+        type: 'product',
+        display: `${p.name} (Product)`,
+        value: p.name,
+        data: p
+      }))
+    
+    // Combine suggestions (invoices first, then products)
+    const allSuggestions = [...invoiceSuggestions, ...productSuggestions]
+    setSearchSuggestions(allSuggestions)
+    setSelectedSuggestionIndex(allSuggestions.length > 0 ? 0 : -1)
+  }, [search, invoices, products])
+  
+  // Keyboard navigation for search dropdown
+  const handleSearchKeyDown = (e) => {
+    if (searchSuggestions.length === 0) {
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        fetchInvoices()
+      }
+      return
+    }
+    
+    switch(e.key) {
+      case 'ArrowDown':
+        e.preventDefault()
+        setSelectedSuggestionIndex(prev => 
+          prev < searchSuggestions.length - 1 ? prev + 1 : 0
+        )
+        break
+      case 'ArrowUp':
+        e.preventDefault()
+        setSelectedSuggestionIndex(prev => 
+          prev > 0 ? prev - 1 : searchSuggestions.length - 1
+        )
+        break
+      case 'Enter':
+        e.preventDefault()
+        if (selectedSuggestionIndex >= 0 && searchSuggestions[selectedSuggestionIndex]) {
+          const suggestion = searchSuggestions[selectedSuggestionIndex]
+          setSearch(suggestion.value)
+          setSearchSuggestions([])
+          setSelectedSuggestionIndex(-1)
+          // Auto-trigger search after selection
+          setTimeout(() => fetchInvoices(), 100)
+        } else {
+          fetchInvoices()
+        }
+        break
+      case 'Escape':
+        e.preventDefault()
+        setSearchSuggestions([])
+        setSelectedSuggestionIndex(-1)
+        break
+    }
+  }
+  
+  // Select suggestion on click
+  const handleSelectSuggestion = (suggestion) => {
+    setSearch(suggestion.value)
+    setSearchSuggestions([])
+    setSelectedSuggestionIndex(-1)
+    setTimeout(() => fetchInvoices(), 100)
+  }
 
   // Fetch full invoice details when viewing
   const handleViewInvoice = async (invoice) => {
@@ -185,7 +282,49 @@ export default function SalesHistory() {
         </div>
         <Card className="p-4">
           <div className="flex flex-wrap items-end gap-3">
-            <SearchInput value={search} onChange={e => setSearch(e.target.value)} placeholder="Search invoice# or customer..." className="w-56" />
+            <div className="relative w-56">
+              <label className="block text-[11px] font-semibold text-[#434653] mb-1 uppercase tracking-wide">Search</label>
+              <div className="relative">
+                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[#737784] text-[18px]">search</span>
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  onKeyDown={handleSearchKeyDown}
+                  placeholder="Invoice#, Customer, Product..."
+                  className="w-full pl-9 pr-4 py-2 border border-[#c3c6d5] rounded-full bg-white text-[13px] focus:border-[#003c90] transition-colors"
+                />
+              </div>
+              {/* Dropdown Suggestions */}
+              {searchSuggestions.length > 0 && (
+                <div 
+                  ref={searchDropdownRef}
+                  className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#c3c6d5] rounded-lg shadow-xl z-50 max-h-64 overflow-y-auto"
+                >
+                  {searchSuggestions.map((suggestion, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => handleSelectSuggestion(suggestion)}
+                      className={`w-full px-4 py-2.5 text-left text-[12px] transition-colors border-b border-[#eceef0] last:border-0 ${
+                        idx === selectedSuggestionIndex
+                          ? 'bg-[#003c90] text-white'
+                          : 'hover:bg-[#f2f4f6] text-[#191c1e]'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className={`material-symbols-outlined text-[16px] ${
+                          idx === selectedSuggestionIndex ? 'text-white' : 'text-[#003c90]'
+                        }`}>
+                          {suggestion.type === 'invoice' ? 'receipt_long' : 'inventory_2'}
+                        </span>
+                        <span>{suggestion.display}</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <Input label="From Date" type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} className="w-40" />
             <Input label="To Date"   type="date" value={toDate}   onChange={e => setToDate(e.target.value)}   className="w-40" />
             <Select label="Status" value={status} onChange={e => setStatus(e.target.value)} className="w-36"
@@ -206,6 +345,10 @@ export default function SalesHistory() {
             </div>
             <div className="space-y-2">
               <p className="text-[12px]"><span className="font-semibold text-[#737784]">Status: </span>{statusBadge(viewInvoice.status)}</p>
+              <p className="text-[12px]"><span className="font-semibold text-[#737784]">Sub Total: </span><span className="font-mono">PKR {fmt(viewInvoice.sub_total)}</span></p>
+              {viewInvoice.discount > 0 && (
+                <p className="text-[12px]"><span className="font-semibold text-[#737784]">Discount: </span><span className="font-mono text-red-600">- PKR {fmt(viewInvoice.discount)}</span></p>
+              )}
               <p className="text-[12px]"><span className="font-semibold text-[#737784]">Grand Total: </span><span className="font-mono font-bold">PKR {fmt(viewInvoice.grand_total)}</span></p>
               <p className="text-[12px]"><span className="font-semibold text-[#737784]">Paid: </span><span className="font-mono text-green-700">PKR {fmt(viewInvoice.paid_amount)}</span></p>
             </div>
@@ -255,6 +398,16 @@ export default function SalesHistory() {
                     ))}
                   </tbody>
                   <tfoot>
+                    <tr className="bg-[#f7f9fb]">
+                      <td colSpan="6" className="px-3 py-2 text-right text-[11px] font-semibold text-[#737784]">Sub Total:</td>
+                      <td className="px-3 py-2 text-right text-[12px] font-mono text-[#434653]">PKR {fmt(viewInvoice.sub_total)}</td>
+                    </tr>
+                    {viewInvoice.discount > 0 && (
+                      <tr className="bg-[#f7f9fb]">
+                        <td colSpan="6" className="px-3 py-2 text-right text-[11px] font-semibold text-red-600">Discount:</td>
+                        <td className="px-3 py-2 text-right text-[12px] font-mono text-red-600">- PKR {fmt(viewInvoice.discount)}</td>
+                      </tr>
+                    )}
                     <tr className="bg-[#f2f4f6] border-t-2 border-[#003c90]">
                       <td colSpan="6" className="px-3 py-2 text-right text-[12px] font-bold text-[#003c90]">Grand Total:</td>
                       <td className="px-3 py-2 text-right text-[14px] font-bold font-mono text-[#003c90]">PKR {fmt(viewInvoice.grand_total)}</td>

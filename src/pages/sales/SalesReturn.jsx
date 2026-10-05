@@ -1,18 +1,33 @@
 import { useState, useEffect } from 'react'
 import { api } from '../../lib/api'
 import { PageHeader, Card, Btn, Table, fmt } from '../../components/ui'
+import { useLocation } from 'react-router-dom'
 
 export default function SalesReturn() {
+  const location = useLocation()
   const [invoiceSearch, setInvoiceSearch] = useState('')
   const [searchResults, setSearchResults] = useState([])
   const [selectedInvoice, setSelectedInvoice] = useState(null)
   const [returnItems, setReturnItems] = useState([])
-  const [returnDiscount, setReturnDiscount] = useState(0) // User can add discount on return
+  const [returnDiscount, setReturnDiscount] = useState(0)
   const [submitting, setSubmitting] = useState(false)
   const [msg, setMsg] = useState(null)
   const [returns, setReturns] = useState([])
 
   useEffect(() => { api.sales.getReturns().then(d => setReturns(Array.isArray(d) ? d : [])) }, [])
+
+  // Auto-select invoice if navigated from FastBilling history popup
+  useEffect(() => {
+    const invoiceNo = location.state?.invoiceNo
+    if (invoiceNo) {
+      setInvoiceSearch(invoiceNo)
+      // Search and auto-select
+      api.sales.getInvoices({ search: invoiceNo, limit: 5 }).then(results => {
+        const match = results.find(r => r.invoice_no === invoiceNo) || results[0]
+        if (match) selectInvoice(match)
+      })
+    }
+  }, [location.state])
 
   useEffect(() => {
     if (!invoiceSearch.trim()) { setSearchResults([]); return }
@@ -27,8 +42,33 @@ export default function SalesReturn() {
     const invoice = full || inv
     setSelectedInvoice(invoice)
     
+    // Group items by product name (merge split batches) before setting return items
+    const groupedItems = (invoice.items || []).reduce((acc, item) => {
+      const existing = acc.find(i => i.product_name === item.product_name && i.sale_price === item.sale_price)
+      if (existing) {
+        // Merge quantities
+        existing.qty += item.qty
+        existing.remaining_qty = (existing.remaining_qty || existing.qty) + (item.remaining_qty || item.qty)
+        existing.total += item.total
+        // Keep track of all sale_item_ids for return processing
+        if (!existing.sale_item_ids) {
+          existing.sale_item_ids = [existing.sale_item_id]
+        }
+        existing.sale_item_ids.push(item.sale_item_id)
+      } else {
+        // Add new item
+        acc.push({ 
+          ...item,
+          sale_item_ids: [item.sale_item_id] // Track original sale_item_id
+        })
+      }
+      return acc
+    }, [])
+    
+    console.log('🔄 Return Items - Original:', invoice.items?.length, '→ Grouped:', groupedItems.length)
+    
     // Use remaining quantities if available (for partial returns)
-    setReturnItems((invoice.items || []).map(item => ({ 
+    setReturnItems(groupedItems.map(item => ({ 
       ...item, 
       return_qty: 0, 
       reason: 'Customer Request', 

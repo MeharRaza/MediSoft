@@ -11,6 +11,10 @@ module.exports = (ipcMain) => {
 
   ipcMain.handle('sales:createInvoice', (_, data) => {
     console.log('🛒 Creating sale invoice...')
+    console.log('📝 Customer data:', {
+      customer_id: data.customer_id,
+      customer_name: data.customer_name
+    })
     const create = db.transaction(() => {
       const invNo = nextInvoiceNo('INV-')
       // Get current local time explicitly
@@ -18,9 +22,9 @@ module.exports = (ipcMain) => {
       console.log('📅 Creating invoice with local time:', localTime)
       
       const r = db.prepare(`
-        INSERT INTO sales (invoice_no,customer_id,branch_id,user_id,payment_method,sub_total,discount,tax,grand_total,paid_amount,change_amount,status,notes,created_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-      `).run(invNo, data.customer_id||null, data.branch_id||1, data.user_id||1,
+        INSERT INTO sales (invoice_no,customer_id,customer_name,branch_id,user_id,payment_method,sub_total,discount,tax,grand_total,paid_amount,change_amount,status,notes,created_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      `).run(invNo, data.customer_id||null, data.customer_name||null, data.branch_id||1, data.user_id||1,
              data.payment_method||'cash', data.sub_total||0, data.discount||0, data.tax||0,
              data.grand_total||0, data.paid_amount||0, data.change_amount||0,
              data.payment_method === 'credit' ? 'credit' : 'paid', data.notes||null, localTime)
@@ -35,39 +39,69 @@ module.exports = (ipcMain) => {
           qty: item.qty,
           expiry_date: item.expiry_date
         })
-        
-        // Insert sale item with link to purchase_item_id
-        const saleItemResult = db.prepare(`INSERT INTO sale_items (sale_id,product_id,purchase_item_id,expiry_date,qty,sale_price,discount_percent,total)
-          VALUES (?,?,?,?,?,?,?,?)`
-        ).run(saleId, item.product_id, item.purchase_item_id||null,
-              item.expiry_date||null, item.qty, item.sale_price, item.discount_percent||0, item.total)
-        
-        console.log(`✅ Sale item inserted with ID: ${saleItemResult.lastInsertRowid}`)
 
-        // Update qty_sold in purchase_items (FIFO tracking)
-        if (item.purchase_item_id) {
-          console.log(`🔄 Updating qty_sold for purchase_item_id: ${item.purchase_item_id}`)
-          const purchaseItem = db.prepare('SELECT id, product_id, qty, qty_sold FROM purchase_items WHERE id=?').get(item.purchase_item_id)
-          if (purchaseItem) {
-            console.log(`   Before update: qty=${purchaseItem.qty}, qty_sold=${purchaseItem.qty_sold || 0}`)
-            const currentQtySold = purchaseItem.qty_sold || 0
-            const newQtySold = currentQtySold + parseFloat(item.qty)
-            
-            const updateResult = db.prepare('UPDATE purchase_items SET qty_sold=? WHERE id=?')
-              .run(newQtySold, item.purchase_item_id)
-            
-            console.log(`   Update result: changes=${updateResult.changes}`)
-            console.log(`   After update: qty_sold=${newQtySold}, remaining=${purchaseItem.qty - newQtySold}`)
-            
-            // Verify update
-            const verify = db.prepare('SELECT qty_sold FROM purchase_items WHERE id=?').get(item.purchase_item_id)
-            console.log(`   Verification: qty_sold in DB is now ${verify.qty_sold}`)
+        // ── FIFO SPLIT: Distribute qty across batches ──────────────────────
+        // Get all available batches for this product (oldest expiry first)
+        const batchesAvailable = db.prepare(`
+          SELECT pi.id, pi.qty, pi.qty_sold, pi.expiry_date,
+                 (pi.qty - pi.qty_sold) as remaining
+          FROM purchase_items pi
+          JOIN purchases pu ON pu.id = pi.purchase_id
+          WHERE pi.product_id = ?
+            AND (pi.qty - pi.qty_sold) > 0
+            AND (pi.expiry_date IS NULL OR pi.expiry_date >= date('now'))
+          ORDER BY pi.expiry_date ASC NULLS LAST, pu.created_at ASC
+        `).all(item.product_id)
+
+        let qtyNeeded = parseFloat(item.qty)
+        const batchSplits = [] // [{purchase_item_id, qty}]
+
+        for (const batch of batchesAvailable) {
+          if (qtyNeeded <= 0) break
+          const take = Math.min(qtyNeeded, batch.remaining)
+          batchSplits.push({ purchase_item_id: batch.id, qty: take, expiry_date: batch.expiry_date })
+          qtyNeeded -= take
+        }
+
+        // If still need more (total stock insufficient), take from the frontend-selected batch
+        if (qtyNeeded > 0 && item.purchase_item_id) {
+          const existing = batchSplits.find(b => b.purchase_item_id === item.purchase_item_id)
+          if (existing) {
+            existing.qty += qtyNeeded
           } else {
-            console.log(`   ❌ Purchase item ${item.purchase_item_id} NOT FOUND in database!`)
+            const batch = db.prepare('SELECT expiry_date FROM purchase_items WHERE id=?').get(item.purchase_item_id)
+            batchSplits.push({ purchase_item_id: item.purchase_item_id, qty: qtyNeeded, expiry_date: batch?.expiry_date || null })
           }
-        } else {
-          console.log(`   ⚠️ No purchase_item_id provided - stock won't be deducted`)
-          console.log(`   This happens when product was added directly (not via Purchase Entry)`)
+          qtyNeeded = 0
+        }
+
+        // If no batches found at all, fall back to frontend-provided batch
+        if (batchSplits.length === 0 && item.purchase_item_id) {
+          const batch = db.prepare('SELECT expiry_date FROM purchase_items WHERE id=?').get(item.purchase_item_id)
+          batchSplits.push({ purchase_item_id: item.purchase_item_id, qty: parseFloat(item.qty), expiry_date: batch?.expiry_date || null })
+        }
+
+        console.log(`   FIFO splits for ${item.qty} qty:`, batchSplits)
+
+        // Insert one sale_item row per batch split + update qty_sold
+        for (const split of batchSplits) {
+          db.prepare(`INSERT INTO sale_items (sale_id,product_id,purchase_item_id,expiry_date,qty,sale_price,discount_percent,total)
+            VALUES (?,?,?,?,?,?,?,?)`
+          ).run(
+            saleId, item.product_id, split.purchase_item_id,
+            split.expiry_date || null,
+            split.qty,
+            item.sale_price,
+            item.discount_percent || 0,
+            // Pro-rate total to this split's qty
+            (item.total / parseFloat(item.qty)) * split.qty
+          )
+
+          // Update qty_sold for this batch
+          db.prepare('UPDATE purchase_items SET qty_sold = qty_sold + ? WHERE id=?')
+            .run(split.qty, split.purchase_item_id)
+
+          console.log(`   ✅ Split: Batch ${split.purchase_item_id} → qty ${split.qty}, qty_sold updated`)
         }
       }
 
@@ -120,8 +154,11 @@ module.exports = (ipcMain) => {
 
   ipcMain.handle('sales:getInvoiceById', (_, id) => {
     const sale = db.prepare(`
-      SELECT s.*, c.name as customer_name FROM sales s
-      LEFT JOIN customers c ON c.id=s.customer_id WHERE s.id=?`).get(id)
+      SELECT s.*, 
+        COALESCE(s.customer_name, c.name) as customer_name
+      FROM sales s
+      LEFT JOIN customers c ON c.id=s.customer_id 
+      WHERE s.id=?`).get(id)
     if (!sale) return null
     
     // Get all items from original sale
@@ -215,6 +252,9 @@ module.exports = (ipcMain) => {
       // Get current local time explicitly
       const localTime = db.prepare(`SELECT datetime('now', 'localtime') as dt`).get().dt
       
+      // Calculate total profit being returned (for logging/tracking)
+      let totalReturnedProfit = 0
+      
       // Create return record with final amount (discount already applied by frontend)
       const r = db.prepare(`INSERT INTO sale_returns (sale_id,customer_id,total,notes,created_at) VALUES (?,?,?,?,?)`)
         .run(data.sale_id||null, data.customer_id||null, data.total, data.notes||null, localTime)
@@ -223,11 +263,64 @@ module.exports = (ipcMain) => {
       console.log(`✅ Return record created with ID: ${returnId}, Total: ${data.total}`)
       
       for (const item of data.items) {
-        // Insert return item (total already calculated by frontend)
-        db.prepare(`INSERT INTO sale_return_items (return_id,product_id,batch_id,qty,price,total) VALUES (?,?,?,?,?,?)`)
-          .run(returnId, item.product_id, item.batch_id||null, item.qty, item.price, item.total)
+        // Get purchase_item_id from original sale_items
+        let purchaseItemId = item.purchase_item_id || null
         
-        console.log(`📦 Return item inserted: product_id=${item.product_id}, qty=${item.qty}, price=${item.price}`)
+        // If not provided, look it up from sale_items
+        if (!purchaseItemId) {
+          const saleItem = db.prepare(`
+            SELECT purchase_item_id 
+            FROM sale_items 
+            WHERE sale_id = ? AND product_id = ?
+            LIMIT 1
+          `).get(data.sale_id, item.product_id)
+          
+          purchaseItemId = saleItem?.purchase_item_id || null
+          console.log(`   🔍 Found purchase_item_id from sale_items: ${purchaseItemId}`)
+        }
+        
+        // Final fallback: FIFO oldest batch for this product
+        if (!purchaseItemId) {
+          const fifoBatch = db.prepare(`
+            SELECT pi.id FROM purchase_items pi
+            JOIN purchases pu ON pu.id = pi.purchase_id
+            WHERE pi.product_id = ?
+            ORDER BY pi.expiry_date ASC NULLS LAST, pu.created_at ASC
+            LIMIT 1
+          `).get(item.product_id)
+          purchaseItemId = fifoBatch?.id || null
+          console.log(`   🔍 FIFO fallback purchase_item_id: ${purchaseItemId}`)
+        }
+        
+        // Get purchase price for profit calculation
+        let purchasePrice = 0
+        if (purchaseItemId) {
+          const purchaseItem = db.prepare(`
+            SELECT purchase_price, pcs_in_pack 
+            FROM purchase_items 
+            WHERE id=?
+          `).get(purchaseItemId)
+          
+          if (purchaseItem) {
+            // Calculate per-piece purchase price
+            const pcsInPack = purchaseItem.pcs_in_pack || 1
+            purchasePrice = purchaseItem.purchase_price / pcsInPack
+            
+            // Calculate returned profit for this item
+            const itemReturnedProfit = (item.price - purchasePrice) * item.qty
+            totalReturnedProfit += itemReturnedProfit
+            
+            console.log(`   📊 Item profit calculation:`)
+            console.log(`      Sale Price: ${item.price}, Purchase Price: ${purchasePrice}`)
+            console.log(`      Qty: ${item.qty}, Returned Profit: ${itemReturnedProfit.toFixed(2)}`)
+          }
+        }
+        
+        // Insert return item WITH purchase_item_id (critical for profit tracking)
+        db.prepare(`INSERT INTO sale_return_items (return_id,product_id,batch_id,qty,price,total,purchase_item_id) VALUES (?,?,?,?,?,?,?)`)
+          .run(returnId, item.product_id, item.batch_id||null, item.qty, item.price, item.total, purchaseItemId)
+        
+        console.log(`📦 Return item inserted: product_id=${item.product_id}, qty=${item.qty}, price=${item.price}, purchase_item_id=${purchaseItemId}`)
         
         // Update batch stock if batch exists
         if (item.batch_id) {
@@ -235,20 +328,22 @@ module.exports = (ipcMain) => {
         }
         
         // IMPORTANT: Return stock to purchase_items (decrease qty_sold)
-        if (item.purchase_item_id) {
-          const before = db.prepare('SELECT qty_sold FROM purchase_items WHERE id=?').get(item.purchase_item_id)
+        if (purchaseItemId) {
+          const before = db.prepare('SELECT qty_sold FROM purchase_items WHERE id=?').get(purchaseItemId)
           console.log(`   Before: qty_sold=${before?.qty_sold}`)
           
           db.prepare('UPDATE purchase_items SET qty_sold = qty_sold - ? WHERE id = ?')
-            .run(item.qty, item.purchase_item_id)
+            .run(item.qty, purchaseItemId)
           
-          const after = db.prepare('SELECT qty_sold FROM purchase_items WHERE id=?').get(item.purchase_item_id)
+          const after = db.prepare('SELECT qty_sold FROM purchase_items WHERE id=?').get(purchaseItemId)
           console.log(`   After: qty_sold=${after?.qty_sold}`)
-          console.log(`   ✅ Stock returned to purchase_item_id: ${item.purchase_item_id}`)
+          console.log(`   ✅ Stock returned to purchase_item_id: ${purchaseItemId}`)
         } else {
           console.log(`   ⚠️ No purchase_item_id found for product ${item.product_id}`)
         }
       }
+      
+      console.log(`💰 Total Returned Profit: Rs. ${totalReturnedProfit.toFixed(2)}`)
       
       // Update customer balance with final return amount
       if (data.customer_id) {
@@ -257,7 +352,7 @@ module.exports = (ipcMain) => {
       }
       
       console.log('✅ Sales return completed successfully')
-      return { id: returnId, total: data.total }
+      return { id: returnId, total: data.total, returnedProfit: totalReturnedProfit }
     })
     return ret()
   })
@@ -344,7 +439,7 @@ module.exports = (ipcMain) => {
       AND (
         SELECT COALESCE(SUM(pi.qty - pi.qty_sold), 0)
         FROM purchase_items pi 
-        WHERE pi.product_id = p.id AND pi.qty > pi.qty_sold
+        WHERE pi.product_id = p.id
       ) <= p.alert_qty
     `).get()
     
@@ -395,8 +490,9 @@ module.exports = (ipcMain) => {
     
     const pendingRecovery = db.prepare(`SELECT COALESCE(SUM(balance),0) as total FROM customers WHERE balance>0`).get()
     
-    // Profit calculation considering ALL discounts
-    const profitToday = db.prepare(`
+    // Profit calculation considering ALL discounts AND returns
+    // Step 1: Calculate profit from all sales
+    const soldProfit = db.prepare(`
       SELECT 
         COALESCE(
           SUM(
@@ -410,7 +506,34 @@ module.exports = (ipcMain) => {
       FROM sale_items si
       JOIN sales s ON s.id=si.sale_id
       LEFT JOIN purchase_items pi ON pi.id=si.purchase_item_id
-      WHERE date(s.created_at)=? AND s.status!='voided'`).get(today)
+      WHERE date(s.created_at)=? AND s.status!='voided'`).get(today).profit
+    
+    // Step 2: Calculate profit that was returned (should be subtracted)
+    // IMPORTANT: Use actual return amount (with discount), not just qty × price
+    const returnedProfit = db.prepare(`
+      SELECT 
+        COALESCE(
+          SUM(
+            -- Use actual return total from sale_returns (has discount applied)
+            -- Distribute it proportionally to items
+            ((sri.qty * sri.price) / NULLIF((SELECT SUM(qty * price) FROM sale_return_items WHERE return_id = sri.return_id), 0)) * sr.total
+            -- Minus cost price of returned items
+            - ((pi.purchase_price / CASE WHEN pi.pcs_in_pack IS NULL OR pi.pcs_in_pack = 0 THEN 1 ELSE pi.pcs_in_pack END) * sri.qty)
+          ),
+          0
+        ) as profit
+      FROM sale_return_items sri
+      JOIN sale_returns sr ON sr.id=sri.return_id
+      LEFT JOIN purchase_items pi ON pi.id=sri.purchase_item_id
+      WHERE date(sr.created_at)=?`).get(today).profit
+    
+    // Net profit = Sold profit - Returned profit
+    const profitToday = { profit: soldProfit - returnedProfit }
+    
+    console.log(`   💰 Profit Calculation:`)
+    console.log(`      Sold Profit: Rs. ${soldProfit.toFixed(2)}`)
+    console.log(`      Returned Profit: Rs. ${returnedProfit.toFixed(2)}`)
+    console.log(`      Net Profit: Rs. ${profitToday.profit.toFixed(2)}`)
     
     const recentSales = db.prepare(`
       SELECT s.invoice_no, s.grand_total, s.status, s.created_at, c.name as customer_name
@@ -445,7 +568,11 @@ module.exports = (ipcMain) => {
         s.created_at as sale_date,
         si.qty,
         si.sale_price,
+        si.discount_percent,
         si.total,
+        s.discount as invoice_discount,
+        s.sub_total as invoice_sub_total,
+        s.grand_total as invoice_grand_total,
         c.name as customer_name,
         u.full_name as cashier_name
       FROM sale_items si

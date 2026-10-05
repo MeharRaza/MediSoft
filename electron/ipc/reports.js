@@ -53,12 +53,15 @@ module.exports = (ipcMain) => {
         COALESCE((
           SELECT SUM(pi.qty - pi.qty_sold) 
           FROM purchase_items pi 
-          WHERE pi.product_id = p.id AND pi.qty > pi.qty_sold
+          WHERE pi.product_id = p.id
         ), 0) as stock,
         COALESCE((
-          SELECT SUM((pi.qty - pi.qty_sold) * pi.purchase_price) 
+          SELECT SUM(
+            (pi.qty - pi.qty_sold) * 
+            (pi.purchase_price / COALESCE(NULLIF(pi.pcs_in_pack, 0), 1))
+          ) 
           FROM purchase_items pi 
-          WHERE pi.product_id = p.id AND pi.qty > pi.qty_sold
+          WHERE pi.product_id = p.id
         ), 0) as stock_value
       FROM products p
       LEFT JOIN categories c ON c.id=p.category_id
@@ -69,20 +72,46 @@ module.exports = (ipcMain) => {
     q += ' GROUP BY p.id ORDER BY p.name'
     const products = db.prepare(q).all(...params)
     const totalValue = products.reduce((s, p) => s + p.stock_value, 0)
+    console.log('📊 Stock Report - Total Products:', products.length, 'Total Value:', totalValue.toFixed(2))
     return { products, totalValue }
   })
 
   ipcMain.handle('reports:getProfitLoss', (_, filters = {}) => {
     const from = filters.from_date || new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0]
     const to   = filters.to_date   || new Date().toISOString().split('T')[0]
-    const revenue = db.prepare(`SELECT COALESCE(SUM(grand_total),0) as t FROM sales WHERE date(created_at) BETWEEN ? AND ? AND status!='voided'`).get(from, to).t
-    const cogs = db.prepare(`
+    
+    // Total Sales Revenue
+    const grossSales = db.prepare(`SELECT COALESCE(SUM(grand_total),0) as t FROM sales WHERE date(created_at) BETWEEN ? AND ? AND status!='voided'`).get(from, to).t
+    
+    // Total Returns
+    const totalReturns = db.prepare(`SELECT COALESCE(SUM(total),0) as t FROM sale_returns WHERE date(created_at) BETWEEN ? AND ?`).get(from, to).t
+    
+    // Net Revenue (Sales - Returns)
+    const revenue = grossSales - totalReturns
+    
+    // Cost of Goods Sold (only for sold items, not returned)
+    const soldCogs = db.prepare(`
       SELECT COALESCE(SUM(si.qty * COALESCE((pi.purchase_price / CASE WHEN pi.pcs_in_pack IS NULL OR pi.pcs_in_pack = 0 THEN 1 ELSE pi.pcs_in_pack END),0)),0) as t
       FROM sale_items si 
       JOIN sales s ON s.id=si.sale_id 
       LEFT JOIN purchase_items pi ON pi.id=si.purchase_item_id
       WHERE date(s.created_at) BETWEEN ? AND ? AND s.status!='voided'`).get(from, to).t
+    
+    // Cost of Returned Goods (COGS that should be subtracted)
+    // Now using purchase_item_id directly from sale_return_items (more accurate)
+    const returnedCogs = db.prepare(`
+      SELECT COALESCE(SUM(sri.qty * COALESCE((pi.purchase_price / CASE WHEN pi.pcs_in_pack IS NULL OR pi.pcs_in_pack = 0 THEN 1 ELSE pi.pcs_in_pack END),0)),0) as t
+      FROM sale_return_items sri
+      JOIN sale_returns sr ON sr.id=sri.return_id
+      LEFT JOIN purchase_items pi ON pi.id=sri.purchase_item_id
+      WHERE date(sr.created_at) BETWEEN ? AND ?`).get(from, to).t
+    
+    // Net COGS (Sold COGS - Returned COGS)
+    const cogs = soldCogs - returnedCogs
+    
+    // Gross Profit = Net Revenue - Net COGS
     const grossProfit = revenue - cogs
+    
     const expenses = db.prepare(`
       SELECT a.name, SUM(ve.debit - ve.credit) as amount FROM voucher_entries ve
       JOIN accounts a ON a.id=ve.account_id JOIN vouchers v ON v.id=ve.voucher_id
@@ -90,7 +119,22 @@ module.exports = (ipcMain) => {
       GROUP BY ve.account_id`).all(from, to)
     const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0)
     const netProfit = grossProfit - totalExpenses
-    return { revenue, cogs, grossProfit, expenses, totalExpenses, netProfit, from, to }
+    
+    return { 
+      revenue, 
+      cogs, 
+      grossProfit, 
+      expenses, 
+      totalExpenses, 
+      netProfit, 
+      from, 
+      to,
+      // Additional details for transparency
+      grossSales,
+      totalReturns,
+      soldCogs,
+      returnedCogs
+    }
   })
 
   ipcMain.handle('reports:getAccountsReport', (_, filters = {}) => {
@@ -106,11 +150,8 @@ module.exports = (ipcMain) => {
   })
 
   ipcMain.handle('reports:getExpiryReport', (_, filters = {}) => {
-    // Return empty if no search (unless loadAll flag)
-    if (!filters.search && !filters.loadAll) {
-      console.log('⚠️ No search query provided - returning empty arrays')
-      return { expired: [], expiring30: [], expiring90: [] }
-    }
+    // Always load expiry data (search is optional filter)
+    console.log('📊 Loading expiry report with filters:', filters)
     
     const today = new Date()
     const todayStr = today.toISOString().split('T')[0]

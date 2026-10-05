@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('api', {
     onDownloaded:(cb)=> ipcRenderer.on('update:downloaded',(_, d) => cb(d)),
     onError:    (cb) => ipcRenderer.on('update:error',     (_, d) => cb(d)),
   },
+  // No custom print handlers
   // Sales
   sales: {
     createInvoice:   (data) => ipcRenderer.invoke('sales:createInvoice', data),
@@ -59,6 +60,7 @@ contextBridge.exposeInMainWorld('api', {
     deleteProduct:   (id) => ipcRenderer.invoke('inventory:deleteProduct', id),
     getBatches:      (productId) => ipcRenderer.invoke('inventory:getBatches', productId),
     getAllBatches:   (filters) => ipcRenderer.invoke('inventory:getAllBatches', filters),
+    updatePurchaseItemExpiry: (data) => ipcRenderer.invoke('inventory:updatePurchaseItemExpiry', data),
     adjustStock:     (data) => ipcRenderer.invoke('inventory:adjustStock', data),
     transferStock:   (data) => ipcRenderer.invoke('inventory:transferStock', data),
     getCategories:   () => ipcRenderer.invoke('inventory:getCategories'),
@@ -66,6 +68,8 @@ contextBridge.exposeInMainWorld('api', {
     getExpiryAlerts: () => ipcRenderer.invoke('inventory:getExpiryAlerts'),
     getLowStock:     () => ipcRenderer.invoke('inventory:getLowStock'),
     searchProduct:   (q) => ipcRenderer.invoke('inventory:searchProduct', q),
+    debugStockCalculation: (productName) => ipcRenderer.invoke('inventory:debugStockCalculation', productName),
+    syncQtySold:     (options) => ipcRenderer.invoke('inventory:syncQtySold', options),
   },
   // Accounts
   accounts: {

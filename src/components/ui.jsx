@@ -1,4 +1,6 @@
 // Shared UI primitives
+import React from 'react'
+
 
 export function PageHeader({ title, subtitle, actions }) {
   return (
@@ -129,6 +131,22 @@ export function Table({ columns, data, emptyMsg = 'No data found' }) {
 }
 
 export function Modal({ open, onClose, title, children, width = 'max-w-lg' }) {
+  // ESC key handler
+  React.useEffect(() => {
+    if (!open) return
+    
+    const handleEscape = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        e.stopPropagation()
+        onClose()
+      }
+    }
+    
+    window.addEventListener('keydown', handleEscape)
+    return () => window.removeEventListener('keydown', handleEscape)
+  }, [open, onClose])
+  
   if (!open) return null
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>

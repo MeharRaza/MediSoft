@@ -2,14 +2,26 @@ import React, { useEffect, useRef } from 'react'
 import { fmt } from './ui'
 
 // Thermal Receipt Print Component (80mm) - Proper Table Format
-export default function InvoicePrint({ invoice, onClose }) {
+export default function InvoicePrint({ invoice, onClose, autoPrint = false }) {
   const printButtonRef = useRef(null)
   const closeButtonRef = useRef(null)
+  const hasAutoPrinted = useRef(false) // Track if auto-print already happened
 
-  // Focus on Print button when component mounts
+  // Auto-print on mount if autoPrint is true (for Ctrl+P)
   useEffect(() => {
-    printButtonRef.current?.focus()
-  }, [])
+    if (autoPrint && !hasAutoPrinted.current) {
+      console.log('🖨️ Opening print dialog...')
+      hasAutoPrinted.current = true
+      
+      // Open browser print dialog with receipt loaded
+      setTimeout(() => {
+        window.print()
+        setTimeout(() => onClose(), 1000)
+      }, 300)
+    } else if (!autoPrint) {
+      printButtonRef.current?.focus()
+    }
+  }, [autoPrint, onClose])
 
   // Keyboard navigation for buttons
   useEffect(() => {
@@ -44,10 +56,39 @@ export default function InvoicePrint({ invoice, onClose }) {
   }, [onClose])
 
   const handlePrint = () => {
+    // Prevent double print during auto-print mode
+    if (autoPrint && hasAutoPrinted.current) {
+      console.log('⚠️ Print already triggered, ignoring duplicate')
+      return
+    }
     window.print()
   }
 
   if (!invoice) return null
+
+  // Debug: Check what customer data we have
+  console.log('📄 Invoice Print Data:', {
+    invoice_no: invoice.invoice_no,
+    customer_id: invoice.customer_id,
+    customer_name: invoice.customer_name,
+    full_invoice: invoice
+  })
+
+  // Group items by product name (merge split batches)
+  const groupedItems = invoice.items?.reduce((acc, item) => {
+    const existing = acc.find(i => i.product_name === item.product_name && i.sale_price === item.sale_price)
+    if (existing) {
+      // Merge quantities and totals
+      existing.qty += item.qty
+      existing.total += item.total
+    } else {
+      // Add new item
+      acc.push({ ...item })
+    }
+    return acc
+  }, []) || []
+
+  console.log('🔄 Original items:', invoice.items?.length, '→ Grouped items:', groupedItems.length)
 
   const date = new Date(invoice.created_at)
   const dateStr = date.toLocaleDateString('en-PK', { day: '2-digit', month: '2-digit', year: 'numeric' })
@@ -142,10 +183,10 @@ export default function InvoicePrint({ invoice, onClose }) {
         <div className="center bold" style={{ fontSize: '16px' }}>
           Harmain Medical Store
         </div>
-        <div className="center" style={{ fontSize: '10px' }}>
+        <div className="center" style={{ fontSize: '13px', marginTop: '2px' }}>
           Opposite Nadra Kiosik Main Bazar Raiwind
         </div>
-        <div className="center" style={{ fontSize: '10px' }}>
+        <div className="center" style={{ fontSize: '13px', marginTop: '2px' }}>
           Phone #: 03228684603
         </div>
         
@@ -175,8 +216,8 @@ export default function InvoicePrint({ invoice, onClose }) {
           <div style={{ textAlign: 'right' }}>Total</div>
         </div>
         
-        {/* Items - Single Row per Item */}
-        {invoice.items?.map((item, idx) => (
+        {/* Items - Single Row per Item (Merged by product name) */}
+        {groupedItems.map((item, idx) => (
           <div key={idx} style={{ 
             display: 'grid',
             gridTemplateColumns: '45% 15% 20% 20%',
@@ -192,24 +233,24 @@ export default function InvoicePrint({ invoice, onClose }) {
         
         <div className="line"></div>
         
-        {/* Totals */}
-        <div className="space-between" style={{ fontSize: '11px' }}>
-          <span>Gross Total:</span>
-          <span>{fmt(invoice.sub_total)}</span>
+        {/* Totals - Labels centered, values right-aligned */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
+          <span style={{ flex: 1, textAlign: 'center' }}>Gross Total:</span>
+          <span style={{ textAlign: 'right', minWidth: '80px' }}>{fmt(invoice.sub_total)}</span>
         </div>
         
         {invoice.discount > 0 && (
-          <div className="space-between" style={{ fontSize: '11px' }}>
-            <span>Discount:</span>
-            <span>{fmt(invoice.discount)}</span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
+            <span style={{ flex: 1, textAlign: 'center' }}>Discount:</span>
+            <span style={{ textAlign: 'right', minWidth: '80px' }}>{fmt(invoice.discount)}</span>
           </div>
         )}
         
         <div className="line"></div>
         
-        <div className="space-between" style={{ fontSize: '13px' }}>
-          <span>Net Total</span>
-          <span>{fmt(invoice.grand_total)}</span>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', fontWeight: 'bold' }}>
+          <span style={{ flex: 1, textAlign: 'center' }}>Net Total</span>
+          <span style={{ textAlign: 'right', minWidth: '80px' }}>{fmt(invoice.grand_total)}</span>
         </div>
         
         <div className="line"></div>

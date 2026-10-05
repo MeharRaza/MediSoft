@@ -24,28 +24,46 @@ const emptyItem = () => ({
 function calcTotal(item, gstTaxPercent = 0) {
   // Calculate base amount: purchase_price (per box) × number of boxes PURCHASED (not bonus)
   const boxes = parseFloat(item.qty_in_boxes) || 0
+  const loose = parseFloat(item.qty_loose) || 0
+  const pcsInPack = parseFloat(item.pcs_in_pack) || 1
   const bonusBoxes = parseFloat(item.bonus) || 0
-  const base = (parseFloat(item.purchase_price)||0) * boxes
+  const purchasePricePerBox = parseFloat(item.purchase_price) || 0
+  const salePricePerBox = parseFloat(item.sale_price) || 0
+  
+  // Calculate purchase cost for boxes
+  const boxesCost = purchasePricePerBox * boxes
+  
+  // Calculate purchase cost for loose pills (per pill price × loose quantity)
+  const pricePerPill = purchasePricePerBox / pcsInPack
+  const looseCost = pricePerPill * loose
+  
+  // Total base cost = boxes cost + loose cost
+  const base = boxesCost + looseCost
+  
   const discountPercent = parseFloat(item.discount_percent) || 0
   const total = base * (1 - discountPercent / 100)
   
   // Calculate profit % based on MARGIN (Sale Price base)
-  // IMPORTANT: Include bonus boxes AND discount in the calculation
-  // If we buy 1 box for Rs. 100 with 2% discount and get 1 free:
-  // - Actual cost = Rs. 98 (after discount)
-  // - With bonus: Rs. 98 ÷ 2 = Rs. 49 per box
-  const purchasePricePerBox = parseFloat(item.purchase_price) || 0
-  const salePricePerBox = parseFloat(item.sale_price) || 0
-  const totalBoxes = boxes + bonusBoxes
+  // IMPORTANT: Include bonus boxes, loose pills, AND discount in the calculation
   
   let profitPercent = 0
   
-  if (salePricePerBox > 0 && totalBoxes > 0) {
+  // Calculate total quantity in pills for both purchased and total (with bonus)
+  const purchasedQtyInPills = (boxes * pcsInPack) + loose
+  const totalQtyInPills = ((boxes + bonusBoxes) * pcsInPack) + loose
+  
+  if (salePricePerBox > 0 && totalQtyInPills > 0 && purchasedQtyInPills > 0) {
     // Apply discount to purchase price first
     const discountedPurchasePrice = purchasePricePerBox * (1 - discountPercent / 100)
     
-    // Calculate effective cost per box (including bonus)
-    const effectiveCostPerBox = (discountedPurchasePrice * boxes) / totalBoxes
+    // Calculate total purchase cost (discounted) in pills
+    const totalPurchaseCostInPills = (discountedPurchasePrice * boxes) + (pricePerPill * loose * (1 - discountPercent / 100))
+    
+    // Calculate effective cost per pill (including bonus)
+    const effectiveCostPerPill = totalPurchaseCostInPills / totalQtyInPills
+    
+    // Convert to per-box basis for comparison with sale price per box
+    const effectiveCostPerBox = effectiveCostPerPill * pcsInPack
     
     // MARGIN Formula: (Sale - EffectiveCost) / Sale × 100
     profitPercent = ((salePricePerBox - effectiveCostPerBox) / salePricePerBox) * 100
@@ -76,6 +94,12 @@ export default function PurchaseEntry() {
   const [selectedCompany, setSelectedCompany] = useState('') // Currently selected company
   const [companyProducts, setCompanyProducts] = useState([]) // Products filtered by company
   const [showCompanyProducts, setShowCompanyProducts] = useState(false)
+  
+  // Debounce timer for auto-updating product info
+  const updateProductTimerRef = useRef({})
+  
+  // Ref to store handleSave function for keyboard shortcuts
+  const handleSaveRef = useRef(null)
   
   // Hold Purchase Entry System (with localStorage persistence)
   const [heldPurchases, setHeldPurchases] = useState(() => {
@@ -169,21 +193,87 @@ export default function PurchaseEntry() {
     })
   }, [])
 
-  // Keyboard shortcut: Ctrl+S to Save Purchase (case-insensitive)
+  // Keyboard shortcuts: Ctrl+S (Save), Ctrl+I (Focus Product Name), Ctrl+G (Focus GST Tax)
   useEffect(() => {
+    console.log('🔧 Keyboard shortcuts registered for Purchase Entry')
+    
     const handleKeyDown = (e) => {
+      console.log('🔑 Key pressed:', e.key, 'Ctrl:', e.ctrlKey, 'Meta:', e.metaKey)
+      
+      // Ctrl+S → Save Purchase
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault()
+        e.stopPropagation()
         console.log('⌨️ Ctrl+S pressed - Saving purchase...')
-        if (!submitting) {
-          handleSave()
+        console.log('📌 handleSaveRef.current exists:', !!handleSaveRef.current)
+        // Call handleSave via ref
+        if (handleSaveRef.current) {
+          console.log('✅ Calling handleSave...')
+          handleSaveRef.current()
+        } else {
+          console.error('❌ handleSaveRef.current is null!')
         }
+        return
+      }
+      
+      // Ctrl+I → Focus on last row's Product Name field
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'i') {
+        e.preventDefault()
+        e.stopPropagation()
+        console.log('⌨️ Ctrl+I pressed - Focusing last product name field...')
+        
+        // Find all product name input fields using the correct placeholder
+        const productNameInputs = document.querySelectorAll('input[placeholder="Search or enter new..."]')
+        console.log('📌 Found product inputs:', productNameInputs.length)
+        if (productNameInputs.length > 0) {
+          // Focus on the last one (latest row)
+          const lastInput = productNameInputs[productNameInputs.length - 1]
+          lastInput.focus()
+          lastInput.select()
+          console.log(`✅ Focused on row ${productNameInputs.length} product name field`)
+        } else {
+          console.error('❌ No product name inputs found!')
+        }
+        return
+      }
+      
+      // Ctrl+G → Focus on GST Tax % field
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'g') {
+        e.preventDefault()
+        e.stopPropagation()
+        console.log('⌨️ Ctrl+G pressed - Focusing GST tax field...')
+        
+        // Find GST tax input - it's in a div after "GST Tax" span
+        const gstSpan = Array.from(document.querySelectorAll('span')).find(span => span.textContent === 'GST Tax')
+        let gstInput = null
+        
+        if (gstSpan) {
+          // Find the parent div and then the input inside it
+          const parentDiv = gstSpan.closest('div')
+          if (parentDiv) {
+            gstInput = parentDiv.querySelector('input[type="number"][placeholder="0"]')
+          }
+        }
+        
+        console.log('📌 GST input found:', !!gstInput)
+        if (gstInput) {
+          gstInput.focus()
+          gstInput.select()
+          console.log('✅ Focused on GST tax field')
+        } else {
+          console.error('❌ GST input not found!')
+        }
+        return
       }
     }
     
     window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [submitting]) // Re-attach when submitting state changes
+    console.log('✅ Keyboard event listener attached')
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      console.log('🗑️ Keyboard event listener removed')
+    }
+  }, []) // Remove dependencies to avoid initialization issue
 
   // NEW: Load supplier's companies when supplier changes
   useEffect(() => {
@@ -281,19 +371,18 @@ export default function PurchaseEntry() {
       return
     }
     
-    // Simple approach: Get unique company names from products table
-    // Company names are stored in products.generic_name field
+    // Get unique company names from products (stored in generic_name field)
     const timer = setTimeout(() => {
-      // Use products table to get existing company names
-      api.inventory.getProducts({}).then(products => {
+      api.inventory.getProducts({ loadAll: true }).then(products => {
         const uniqueCompanies = new Set()
         products.forEach(p => {
+          // Company name is stored in generic_name field
           if (p.company_name && p.company_name.toLowerCase().includes(val.toLowerCase())) {
             uniqueCompanies.add(p.company_name)
           }
         })
-        const results = Array.from(uniqueCompanies).map(name => ({ name }))
-        console.log(`🏢 Company search for "${val}":`, results)
+        const results = Array.from(uniqueCompanies).slice(0, 10).map(name => ({ name }))
+        console.log(`🏢 Company autocomplete for "${val}":`, results.length, 'matches')
         setCompanyResults(r => ({ ...r, [idx]: results }))
       }).catch(err => {
         console.error('Company search error:', err)
@@ -361,6 +450,42 @@ export default function PurchaseEntry() {
     updated[idx].total = calc.total
     updated[idx].profit_percent = calc.profit_percent
     setItems(updated)
+    
+    // 🆕 Auto-update product base info when user edits rack_location or pcs_in_pack
+    // This ensures Fast Billing and Inventory show latest info
+    if ((field === 'rack_location' || field === 'pcs_in_pack') && updated[idx].product_id) {
+      console.log(`🔄 Will auto-update product ${updated[idx].product_id} - ${field}: ${val}`)
+      
+      // Clear previous timer for this row
+      if (updateProductTimerRef.current[idx]) {
+        clearTimeout(updateProductTimerRef.current[idx])
+      }
+      
+      // Debounce the update to avoid too many API calls (1 second delay)
+      updateProductTimerRef.current[idx] = setTimeout(() => {
+        const item = updated[idx]
+        console.log(`🔄 Executing auto-update for product ${item.product_id}`)
+        
+        api.inventory.updateProduct({
+          id: item.product_id,
+          name: item.product_name,
+          generic_name: item.company_name || '',
+          rack_location: item.rack_location || '',
+          pcs_in_pack: parseInt(item.pcs_in_pack) || 1,
+          sale_price: parseFloat(item.sale_price) || 0,
+          trade_price: parseFloat(item.purchase_price) || 0,
+          alert_qty: 10,
+          is_active: 1
+        }).then(() => {
+          console.log(`✅ Product ${item.product_id} base info updated successfully`)
+          setMsg({ type: 'success', text: `Product info updated: ${item.product_name}` })
+          setTimeout(() => setMsg(null), 2000)
+        }).catch(err => {
+          console.error('❌ Failed to update product:', err)
+          setMsg({ type: 'error', text: 'Failed to update product info' })
+        })
+      }, 1000) // 1 second debounce
+    }
   }
 
   const addRow = () => {
@@ -377,8 +502,8 @@ export default function PurchaseEntry() {
   const gstTaxAmount = subTotal * (parseFloat(form.gst_tax_percent) || 0) / 100
   const grandTotal = subTotal + gstTaxAmount
 
-  // Post Permanently - Ctrl+Q
-  const handleSave = async () => {
+  // Post Permanently - Ctrl+S (optimized with useCallback)
+  const handleSave = useCallback(async () => {
     // Debug: Check items before validation
     console.log('📦 All items before validation:', items)
     
@@ -449,7 +574,12 @@ export default function PurchaseEntry() {
       setCompanyProducts([]) // Reset company products
     } catch (err) { setMsg({ type: 'error', text: err.message }) }
     finally { setSubmitting(false) }
-  }
+  }, [items, form, currentPurchaseIndex, heldPurchases, subTotal, gstTaxAmount, grandTotal])
+  
+  // Update handleSave ref for keyboard shortcuts
+  useEffect(() => {
+    handleSaveRef.current = handleSave
+  }, [handleSave])
 
   // Delete current held purchase - INSTANT (NO POPUP)
   const deleteCurrentHeldPurchase = useCallback(() => {

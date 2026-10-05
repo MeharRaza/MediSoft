@@ -2,12 +2,37 @@ import { useState, useEffect, useRef } from 'react'
 import { api } from '../../lib/api'
 import { PageHeader, Card, Table, Btn, fmt } from '../../components/ui'
 
+// Add toast animation styles
+const toastStyles = `
+  @keyframes slide-in {
+    from {
+      transform: translateX(400px);
+      opacity: 0;
+    }
+    to {
+      transform: translateX(0);
+      opacity: 1;
+    }
+  }
+  .animate-slide-in {
+    animation: slide-in 0.3s ease-out;
+  }
+`
+
 export default function BatchExpiry() {
   const [data, setData]       = useState({ expired: [], expiring30: [], expiring90: [], all: [] })
   const [loading, setLoading] = useState(false)
   const [tab, setTab]         = useState('all')
   const [search, setSearch]   = useState('')
   const [hasSearched, setHasSearched] = useState(false)
+  
+  // Edit expiry state
+  const [editingBatch, setEditingBatch] = useState(null)
+  const [newExpiry, setNewExpiry] = useState('')
+  const [saving, setSaving] = useState(false)
+  
+  // Toast notification
+  const [toast, setToast] = useState(null)
   
   // Autocomplete dropdown
   const [suggestions, setSuggestions] = useState([])
@@ -105,22 +130,126 @@ export default function BatchExpiry() {
 
   const handleRefresh = () => {
     setSearch('')
-    setData({ expired: [], expiring30: [], expiring90: [], all: [] })
-    setHasSearched(false)
     setSuggestions([])
     setShowDropdown(false)
+    setEditingBatch(null)
+    setNewExpiry('')
+    // Reload all expiry alerts
+    loadExpiryAlerts()
+  }
+  
+  // Handle edit expiry
+  const handleEditExpiry = (batch) => {
+    setEditingBatch(batch.id)
+    setNewExpiry(batch.expiry_date || '')
+  }
+  
+  const handleCancelEdit = () => {
+    setEditingBatch(null)
+    setNewExpiry('')
+  }
+  
+  const handleSaveExpiry = async (batchId) => {
+    if (!newExpiry) {
+      setToast({ type: 'error', message: 'Please enter a valid expiry date' })
+      setTimeout(() => setToast(null), 3000)
+      return
+    }
+    
+    setSaving(true)
+    try {
+      await api.inventory.updatePurchaseItemExpiry({
+        purchase_item_id: batchId,
+        expiry_date: newExpiry
+      })
+      
+      // Reset editing state BEFORE refresh
+      setEditingBatch(null)
+      setNewExpiry('')
+      
+      // Show success toast
+      setToast({ type: 'success', message: 'Expiry date updated successfully!' })
+      setTimeout(() => setToast(null), 3000)
+      
+      // Refresh data
+      await fetchDataWithQuery(search)
+      
+    } catch (error) {
+      console.error('Error updating expiry:', error)
+      setToast({ type: 'error', message: 'Failed to update: ' + error.message })
+      setTimeout(() => setToast(null), 3000)
+      // Reset state even on error
+      setEditingBatch(null)
+      setNewExpiry('')
+    } finally {
+      setSaving(false)
+    }
   }
 
   useEffect(() => {
-    console.log('🔧 [BatchExpiry Page] Mounting - NOT loading data automatically')
-    setData({ expired: [], expiring30: [], expiring90: [], all: [] })
-    setHasSearched(false)
+    console.log('🔧 [BatchExpiry Page] Mounting - Auto-loading expiry alerts')
+    // Auto-load expired and expiring items on mount
+    loadExpiryAlerts()
   }, [])
+  
+  const loadExpiryAlerts = async () => {
+    setLoading(true)
+    setHasSearched(true)
+    try {
+      // Load only expiry data (expired, expiring30, expiring90) - NOT all batches
+      const expiryData = await api.reports.getExpiryReport({ search: '' })
+      
+      setData({
+        expired: expiryData?.expired || [],
+        expiring30: expiryData?.expiring30 || [],
+        expiring90: expiryData?.expiring90 || [],
+        all: [] // Keep all batches empty - user must search for this
+      })
+      console.log('✅ Auto-loaded expiry alerts (excluding all batches):', {
+        expired: expiryData?.expired?.length,
+        expiring30: expiryData?.expiring30?.length,
+        expiring90: expiryData?.expiring90?.length
+      })
+    } catch (err) {
+      console.error('❌ Failed to load expiry alerts:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const cols = [
     { key: 'product_name', label: 'Product',    render: v => <span className="text-[12px] font-semibold">{v}</span> },
     { key: 'batch_no',     label: 'Batch #',    mono: true, render: v => <span className="text-[12px] font-mono">{v||'—'}</span> },
-    { key: 'expiry_date',  label: 'Expiry Date', render: (v) => {
+    { key: 'expiry_date',  label: 'Expiry Date', render: (v, row) => {
+      // If editing this batch, show input field
+      if (editingBatch === row.id) {
+        return (
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              value={newExpiry}
+              onChange={(e) => setNewExpiry(e.target.value)}
+              className="px-2 py-1 border border-[#003c90] rounded text-[12px] focus:outline-none focus:ring-2 focus:ring-[#003c90]/20"
+              autoFocus
+            />
+            <button
+              onClick={() => handleSaveExpiry(row.id)}
+              disabled={saving}
+              className="px-2 py-1 bg-[#003c90] text-white rounded text-[11px] font-semibold hover:opacity-90 disabled:opacity-50"
+            >
+              {saving ? 'Saving...' : 'Save'}
+            </button>
+            <button
+              onClick={handleCancelEdit}
+              className="px-2 py-1 bg-gray-200 text-[#434653] rounded text-[11px] font-semibold hover:bg-gray-300"
+            >
+              Cancel
+            </button>
+          </div>
+        )
+      }
+      
+      // Normal display
       if (!v) return '-'
       const days = Math.floor((new Date(v) - new Date()) / 86400000)
       const cls  = days < 0 ? 'text-[#ba1a1a] font-bold' : days < 30 ? 'text-amber-600 font-bold' : days < 180 ? 'text-amber-500' : 'text-green-600'
@@ -129,6 +258,16 @@ export default function BatchExpiry() {
     { key: 'qty',          label: 'Stock (Pills)', right: true, render: v => <span className="text-[12px] font-mono font-bold text-[#003c90]">{fmt(v)}</span> },
     { key: 'qty_in_boxes', label: 'Boxes', right: true, render: v => <span className="text-[11px] font-mono text-[#737784]">{v || 0}</span> },
     { key: 'qty_loose',    label: 'Loose', right: true, render: v => <span className="text-[11px] font-mono text-[#737784]">{v || 0}</span> },
+    { key: 'actions',      label: 'Actions', render: (_, row) => (
+      <button
+        onClick={() => handleEditExpiry(row)}
+        disabled={editingBatch !== null || saving}
+        className="px-3 py-1 bg-[#003c90] text-white rounded text-[11px] font-semibold hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+      >
+        <span className="material-symbols-outlined text-[14px] inline-block align-middle mr-1">edit</span>
+        Edit Expiry
+      </button>
+    )},
   ]
 
   const tabs = [
@@ -140,16 +279,73 @@ export default function BatchExpiry() {
 
   const currentData = data[tab] || []
   
-  // Filter by search query
-  const filteredData = search.trim() 
-    ? currentData.filter(item => 
+  // Filter by search query and hide zero/negative stock batches
+  // Absorb negative batch deficits into positive batches (frontend only, DB unchanged)
+  const getAdjustedBatches = (batches) => {
+    if (!batches || batches.length === 0) return []
+    
+    // Group by product_id
+    const byProduct = {}
+    batches.forEach(b => {
+      if (!byProduct[b.product_id]) byProduct[b.product_id] = []
+      byProduct[b.product_id].push({ ...b })
+    })
+    
+    const result = []
+    
+    Object.values(byProduct).forEach(productBatches => {
+      // Separate negative and positive batches
+      const negative = productBatches.filter(b => b.qty <= 0)
+      const positive = productBatches.filter(b => b.qty > 0)
+        .sort((a, b) => {
+          if (!a.expiry_date) return 1
+          if (!b.expiry_date) return -1
+          return new Date(a.expiry_date) - new Date(b.expiry_date)
+        })
+      
+      // Total deficit from negative batches
+      const totalDeficit = negative.reduce((sum, b) => sum + Math.abs(b.qty), 0)
+      
+      // Absorb deficit into positive batches (oldest expiry first)
+      let remainingDeficit = totalDeficit
+      const adjusted = positive.map(b => {
+        if (remainingDeficit <= 0) return b
+        const newQty = b.qty - remainingDeficit
+        remainingDeficit = Math.max(0, remainingDeficit - b.qty)
+        return { ...b, qty: Math.max(0, newQty) }
+      })
+      
+      // Only show batches with qty > 0
+      adjusted.filter(b => b.qty > 0).forEach(b => result.push(b))
+    })
+    
+    return result
+  }
+
+  const filteredData = search.trim()
+    ? getAdjustedBatches(currentData.filter(item =>
         (item.product_name || '').toLowerCase().includes(search.toLowerCase()) ||
         (item.batch_no || '').toLowerCase().includes(search.toLowerCase())
-      )
-    : currentData
+      ))
+    : getAdjustedBatches(currentData)
 
   return (
     <div className="flex flex-col h-full bg-[#f7f9fb]">
+      {/* Toast Animation Styles */}
+      <style>{toastStyles}</style>
+      
+      {/* Toast Notification */}
+      {toast && (
+        <div className={`fixed top-20 right-5 z-50 px-4 py-3 rounded-lg shadow-lg flex items-center gap-2 animate-slide-in ${
+          toast.type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
+        }`}>
+          <span className="material-symbols-outlined text-[20px]">
+            {toast.type === 'success' ? 'check_circle' : 'error'}
+          </span>
+          <span className="text-[13px] font-semibold">{toast.message}</span>
+        </div>
+      )}
+      
       <PageHeader 
         title="Batch & Expiry Management" 
         subtitle="Track product expiry dates and batches"

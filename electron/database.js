@@ -232,6 +232,32 @@ function runMigrations() {
       console.log('   ✅ New sales will use correct profit formula (with discounts)')
     }
     
+    // Migration 11: Add purchase_item_id to sale_return_items (link returns to purchase batches)
+    const returnItemsInfo = db.prepare("PRAGMA table_info(sale_return_items)").all()
+    const hasReturnPurchaseItemId = returnItemsInfo.some(col => col.name === 'purchase_item_id')
+    
+    if (!hasReturnPurchaseItemId) {
+      console.log('🔄 Running migration: Adding purchase_item_id to sale_return_items table...')
+      db.exec(`ALTER TABLE sale_return_items ADD COLUMN purchase_item_id INTEGER REFERENCES purchase_items(id);`)
+      console.log('✅ Migration complete: sale_return_items.purchase_item_id added')
+      console.log('   ℹ️  Note: This will enable accurate profit tracking for sales returns')
+    } else {
+      console.log('✅ sale_return_items table already has purchase_item_id column')
+    }
+    
+    // Migration 12: Add customer_name to sales table (for free-text customer names)
+    const salesInfo = db.prepare("PRAGMA table_info(sales)").all()
+    const hasCustomerName = salesInfo.some(col => col.name === 'customer_name')
+    
+    if (!hasCustomerName) {
+      console.log('🔄 Running migration: Adding customer_name to sales table...')
+      db.exec(`ALTER TABLE sales ADD COLUMN customer_name TEXT;`)
+      console.log('✅ Migration complete: sales.customer_name added')
+      console.log('   ℹ️  Note: This allows free-text customer names on receipts')
+    } else {
+      console.log('✅ sales table already has customer_name column')
+    }
+    
     console.log('✅ All migrations checked and applied successfully!')
   } catch (err) {
     console.error('❌ Migration error:', err.message)

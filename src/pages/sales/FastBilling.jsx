@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { api } from '../../lib/api'
-import { fmt, Badge } from '../../components/ui'
+import { fmt, Badge, Modal } from '../../components/ui'
 import InvoicePrint from '../../components/InvoicePrint'
+import { useNavigate } from 'react-router-dom'
 
 export default function FastBilling() {
+  const navigate = useNavigate()
   const [items, setItems] = useState([])
   const [searchQ, setSearchQ] = useState('')
   const [searchResults, setSearchResults] = useState([])
@@ -17,12 +19,20 @@ export default function FastBilling() {
   const [loading, setSaving] = useState(false)
   const [success, setSuccess] = useState(null)
   const [printInvoice, setPrintInvoice] = useState(null) // For print modal after sale
+  const [autoPrint, setAutoPrint] = useState(false) // For auto-print (Ctrl+P)
   const [customerSearch, setCustomerSearch] = useState('')
+  const [selectedCustomerDropdownIndex, setSelectedCustomerDropdownIndex] = useState(0) // For customer dropdown keyboard navigation
+  
+  // Item History Popup (Ctrl+H)
+  const [historyPopup, setHistoryPopup] = useState(null) // { product_id, name, data }
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [focusedRowIndex, setFocusedRowIndex] = useState(-1) // Track which row is focused
   const searchRef = useRef()
   const searchDropdownRef = useRef() // For dropdown scrolling
   const inputRefs = useRef({}) // For cart table navigation
   const handleFinishSaleRef = useRef() // For Ctrl+S shortcut
   const handleFinishSaleWithPrintRef = useRef() // For Ctrl+P shortcut
+  const handleHoldBillRef = useRef() // For F8 shortcut
   
   // Refs for auto-hold to avoid re-running cleanup on every state change
   const itemsRef = useRef([])
@@ -161,6 +171,15 @@ export default function FastBilling() {
         return
       }
       
+      // Jump to Customer Field: Ctrl+U
+      if (e.ctrlKey && e.key.toLowerCase() === 'u') {
+        e.preventDefault()
+        e.stopPropagation()
+        document.getElementById('customer-search-input')?.focus()
+        document.getElementById('customer-search-input')?.select()
+        return
+      }
+      
       // Navigate Bills: Ctrl+Left/Right
       if (e.ctrlKey && e.key === 'ArrowLeft') {
         e.preventDefault()
@@ -172,6 +191,15 @@ export default function FastBilling() {
         e.preventDefault()
         e.stopPropagation()
         navigateBill('next')
+        return
+      }
+      
+      // Hold Bill: F8
+      if (e.key === 'F8') {
+        console.log('⌨️ F8 key pressed!')
+        e.preventDefault()
+        e.stopPropagation()
+        handleHoldBillRef.current?.()
         return
       }
     }
@@ -265,8 +293,17 @@ export default function FastBilling() {
   const handleCartKeyDown = (e, rowIndex, field) => {
     if (items.length === 0) return
 
-    const fields = ['qty', 'sale_price', 'discount_percent']
+    const fields = ['qty', 'sale_price', 'discount_percent', 'delete']
     const currentFieldIndex = fields.indexOf(field)
+    
+    // Ctrl+H - Show item history popup
+    if (e.ctrlKey && e.key.toLowerCase() === 'h') {
+      e.preventDefault()
+      e.stopPropagation()
+      const item = items[rowIndex]
+      if (item) openHistoryPopup(item)
+      return
+    }
     
     // Shift+Enter - Jump to payment panel (MUST BE FIRST!)
     if (e.shiftKey && e.key === 'Enter') {
@@ -281,7 +318,11 @@ export default function FastBilling() {
         // Move to next field in same row
         if (currentFieldIndex < fields.length - 1) {
           const nextField = fields[currentFieldIndex + 1]
-          inputRefs.current[`${rowIndex}-${nextField}`]?.focus()
+          if (nextField === 'delete') {
+            inputRefs.current[`${rowIndex}-delete-btn`]?.focus()
+          } else {
+            inputRefs.current[`${rowIndex}-${nextField}`]?.focus()
+          }
         }
         break
 
@@ -298,7 +339,11 @@ export default function FastBilling() {
         e.preventDefault()
         // Move to same field in next row
         if (rowIndex < items.length - 1) {
-          inputRefs.current[`${rowIndex + 1}-${field}`]?.focus()
+          if (field === 'delete') {
+            inputRefs.current[`${rowIndex + 1}-delete-btn`]?.focus()
+          } else {
+            inputRefs.current[`${rowIndex + 1}-${field}`]?.focus()
+          }
         }
         break
 
@@ -306,22 +351,33 @@ export default function FastBilling() {
         e.preventDefault()
         // Move to same field in previous row
         if (rowIndex > 0) {
-          inputRefs.current[`${rowIndex - 1}-${field}`]?.focus()
+          if (field === 'delete') {
+            inputRefs.current[`${rowIndex - 1}-delete-btn`]?.focus()
+          } else {
+            inputRefs.current[`${rowIndex - 1}-${field}`]?.focus()
+          }
         }
         break
 
       case 'Enter':
         e.preventDefault()
-        // Move to next field, or next row if at end of row
-        if (currentFieldIndex < fields.length - 1) {
-          const nextField = fields[currentFieldIndex + 1]
-          inputRefs.current[`${rowIndex}-${nextField}`]?.focus()
-        } else if (rowIndex < items.length - 1) {
-          // Move to first field of next row
-          inputRefs.current[`${rowIndex + 1}-${fields[0]}`]?.focus()
-        } else {
-          // Last field of last row - go back to search
+        if (field === 'delete') {
+          // Delete button - remove item
+          removeItem(rowIndex)
+          // Focus on search after delete
           searchRef.current?.focus()
+        } else {
+          // Enter key moves through fields in SAME row, then to search
+          // It does NOT go to delete button or next row
+          if (currentFieldIndex < fields.length - 2) {
+            // Move to next input field (not delete)
+            // fields.length - 2 because last element is 'delete'
+            const nextField = fields[currentFieldIndex + 1]
+            inputRefs.current[`${rowIndex}-${nextField}`]?.focus()
+          } else {
+            // At Disc% field (last input) - go to search bar
+            searchRef.current?.focus()
+          }
         }
         break
 
@@ -333,7 +389,12 @@ export default function FastBilling() {
             const prevField = fields[currentFieldIndex - 1]
             inputRefs.current[`${rowIndex}-${prevField}`]?.focus()
           } else if (rowIndex > 0) {
-            inputRefs.current[`${rowIndex - 1}-${fields[fields.length - 1]}`]?.focus()
+            const lastField = fields[fields.length - 1]
+            if (lastField === 'delete') {
+              inputRefs.current[`${rowIndex - 1}-delete-btn`]?.focus()
+            } else {
+              inputRefs.current[`${rowIndex - 1}-${lastField}`]?.focus()
+            }
           } else {
             // First field of first row - go to search
             searchRef.current?.focus()
@@ -342,7 +403,11 @@ export default function FastBilling() {
           // Tab - move forwards
           if (currentFieldIndex < fields.length - 1) {
             const nextField = fields[currentFieldIndex + 1]
-            inputRefs.current[`${rowIndex}-${nextField}`]?.focus()
+            if (nextField === 'delete') {
+              inputRefs.current[`${rowIndex}-delete-btn`]?.focus()
+            } else {
+              inputRefs.current[`${rowIndex}-${nextField}`]?.focus()
+            }
           } else if (rowIndex < items.length - 1) {
             // Last field of current row - move to first field of next row
             inputRefs.current[`${rowIndex + 1}-${fields[0]}`]?.focus()
@@ -362,8 +427,21 @@ export default function FastBilling() {
     }
   }
 
-  const addItem = (product) => {
-    console.log('➕ Adding product to cart:', {
+  // Open item history popup
+  const openHistoryPopup = async (item) => {
+    setHistoryPopup({ product_id: item.product_id, name: item.name, data: null })
+    setHistoryLoading(true)
+    try {
+      const data = await api.sales.getProductHistory(item.product_id)
+      setHistoryPopup({ product_id: item.product_id, name: item.name, data })
+    } catch (err) {
+      console.error('Failed to load history:', err)
+    } finally {
+      setHistoryLoading(false)
+    }
+  }
+
+  const addItem = (product) => {    console.log('➕ Adding product to cart:', {
       id: product.id,
       name: product.name,
       current_purchase_item_id: product.current_purchase_item_id,
@@ -402,7 +480,7 @@ export default function FastBilling() {
     setSelectedIndex(-1)
     const existing = items.findIndex(i => i.product_id === product.id && i.purchase_item_id === product.current_purchase_item_id)
     if (existing >= 0) {
-      // Product already exists - increment quantity and focus on it
+      // Product already exists - increment quantity
       const updated = [...items]
       updated[existing].qty += 1
       updated[existing].total = calcTotal(updated[existing])
@@ -463,20 +541,40 @@ export default function FastBilling() {
   const removeItem = (idx) => setItems(items.filter((_, i) => i !== idx))
 
   const subTotal  = items.reduce((s, i) => s + i.total, 0)
+  
+  // Calculate per-item discounts total
+  const perItemDiscAmt = items.reduce((sum, item) => {
+    const itemBase = item.qty * item.sale_price
+    const itemDisc = itemBase * (item.discount_percent / 100)
+    return sum + itemDisc
+  }, 0)
+  
   const percentDiscAmt = subTotal * (percentDiscount / 100) // First apply percentage
   const afterPercent = subTotal - percentDiscAmt
   const totalDiscAmt = percentDiscAmt + parseFloat(flatDiscount || 0) // Then add flat discount
+  
+  // Grand total discount including per-item discounts
+  const grandTotalDiscount = perItemDiscAmt + totalDiscAmt
+  
   const grandTotal = subTotal - totalDiscAmt
   const change    = (parseFloat(paidAmount) || 0) - grandTotal
   
-  // Calculate total profit
+  // Calculate total profit using profit_percent from purchase entry (includes bonus/discount)
   const totalProfit = items.reduce((sum, item) => {
+    // Use profit_percent from purchase_items (correctly accounts for bonus, discount)
+    // profit_percent is margin-based: (sale - effectiveCost) / sale * 100
+    if (item.profit_percent && item.profit_percent !== 0) {
+      // Profit = sale_price × profit_percent% × qty
+      const profitPerPill = (item.sale_price || 0) * (item.profit_percent / 100)
+      return sum + profitPerPill * item.qty
+    }
+    // Fallback: use purchase_price if no profit_percent
     const costPrice = (item.purchase_price || 0) * item.qty
-    const sellingPrice = item.total // After item-level discount
+    const sellingPrice = item.total
     return sum + (sellingPrice - costPrice)
   }, 0)
   
-  // Profit after both discounts
+  // Profit after global discounts
   const finalProfit = totalProfit - totalDiscAmt
 
   const handleFinishSale = useCallback(async () => {
@@ -493,6 +591,7 @@ export default function FastBilling() {
     try {
       const result = await api.sales.createInvoice({
         customer_id: selectedCustomer?.id || null,
+        customer_name: selectedCustomer ? selectedCustomer.name : (customerSearch.trim() || null),
         payment_method: paymentMethod,
         sub_total: subTotal,
         discount: totalDiscAmt,
@@ -530,7 +629,7 @@ export default function FastBilling() {
         setCurrentBillIndex(-1)
       }
       
-      setItems([]); setSearchQ(''); setSelectedCustomer(null)
+      setItems([]); setSearchQ(''); setSelectedCustomer(null); setCustomerSearch('')
       setPaidAmount(''); setPercentDiscount(0); setFlatDiscount(0)
       setSaving(false)
       setTimeout(() => { setSuccess(null); searchRef.current?.focus() }, 2500)
@@ -551,10 +650,17 @@ export default function FastBilling() {
       qty: i.qty
     })))
     
+    console.log('👤 Customer info:', {
+      selectedCustomer,
+      customerSearch,
+      will_send: selectedCustomer ? selectedCustomer.name : (customerSearch.trim() || null)
+    })
+    
     setSaving(true)
     try {
       const result = await api.sales.createInvoice({
         customer_id: selectedCustomer?.id || null,
+        customer_name: selectedCustomer ? selectedCustomer.name : (customerSearch.trim() || null),
         payment_method: paymentMethod,
         sub_total: subTotal,
         discount: totalDiscAmt,
@@ -577,6 +683,7 @@ export default function FastBilling() {
       // ENABLED for Ctrl+P: Show invoice for print
       try {
         const invoiceDetails = await api.sales.getInvoiceById(result.id)
+        setAutoPrint(true) // Enable auto-print for Ctrl+P
         setPrintInvoice(invoiceDetails)
       } catch (e) {
         console.error('Failed to fetch invoice for printing:', e)
@@ -592,7 +699,7 @@ export default function FastBilling() {
         setCurrentBillIndex(-1)
       }
       
-      setItems([]); setSearchQ(''); setSelectedCustomer(null)
+      setItems([]); setSearchQ(''); setSelectedCustomer(null); setCustomerSearch('')
       setPaidAmount(''); setPercentDiscount(0); setFlatDiscount(0)
       setSaving(false)
       setTimeout(() => { setSuccess(null); searchRef.current?.focus() }, 2500)
@@ -602,19 +709,17 @@ export default function FastBilling() {
     }
   }, [items, selectedCustomer, paymentMethod, subTotal, totalDiscAmt, grandTotal, paidAmount, change, currentBillIndex, heldBills])
   
-  // Update ref whenever handleFinishSale changes
-  useEffect(() => {
-    handleFinishSaleRef.current = handleFinishSale
-    handleFinishSaleWithPrintRef.current = handleFinishSaleWithPrint
-  }, [handleFinishSale, handleFinishSaleWithPrint])
-
   // Hold current bill and start new one
-  const handleHoldBill = () => {
+  const handleHoldBill = useCallback(() => {
+    console.log('🔔 handleHoldBill called! Items:', items.length)
+    
     if (items.length === 0) {
+      console.log('⚠️ Cart is empty, showing alert')
       alert('Cart is empty. Nothing to hold.')
       return
     }
     
+    console.log('✅ Creating bill to hold with', items.length, 'items')
     const billToHold = {
       items: [...items],
       customer: selectedCustomer,
@@ -627,16 +732,24 @@ export default function FastBilling() {
     
     if (currentBillIndex >= 0) {
       // Update existing held bill
+      console.log('🔄 Updating existing held bill at index', currentBillIndex)
       setHeldBills(prev => {
         const updated = [...prev]
         updated[currentBillIndex] = billToHold
+        console.log('💾 Updated held bills:', updated.length, 'total')
         return updated
       })
     } else {
       // Add new held bill
-      setHeldBills(prev => [...prev, billToHold])
+      console.log('➕ Adding new held bill')
+      setHeldBills(prev => {
+        const newBills = [...prev, billToHold]
+        console.log('💾 New held bills array:', newBills.length, 'total')
+        return newBills
+      })
     }
     
+    console.log('🧹 Resetting cart to new bill')
     // Reset to new bill
     setCurrentBillIndex(-1)
     setItems([])
@@ -648,7 +761,15 @@ export default function FastBilling() {
     setSearchQ('')
     
     searchRef.current?.focus()
-  }
+    console.log('✅ handleHoldBill completed successfully')
+  }, [items, selectedCustomer, paymentMethod, paidAmount, percentDiscount, flatDiscount, currentBillIndex])
+  
+  // Update ref whenever handleFinishSale changes
+  useEffect(() => {
+    handleFinishSaleRef.current = handleFinishSale
+    handleFinishSaleWithPrintRef.current = handleFinishSaleWithPrint
+    handleHoldBillRef.current = handleHoldBill
+  }, [handleFinishSale, handleFinishSaleWithPrint, handleHoldBill])
 
   // Navigate between held bills
   const navigateBill = (direction) => {
@@ -822,20 +943,95 @@ export default function FastBilling() {
           <div className="relative w-56">
             <span className="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-[16px] text-[#737784]">person</span>
             <input
+              id="customer-search-input"
               type="text"
               value={customerSearch || selectedCustomer?.name || ''}
-              onChange={e => { setCustomerSearch(e.target.value); setSelectedCustomer(null) }}
+              onChange={e => { 
+                setCustomerSearch(e.target.value); 
+                setSelectedCustomer(null);
+                setSelectedCustomerDropdownIndex(0); // Reset selection
+              }}
+              onKeyDown={e => {
+                if (!customerSearch) return;
+                
+                const matchingCustomers = customers.filter(c => c.name.toLowerCase().includes(customerSearch.toLowerCase()));
+                const totalOptions = matchingCustomers.length + 1; // +1 for "Use as Walk-in" button
+                
+                if (e.key === 'ArrowDown') {
+                  e.preventDefault();
+                  setSelectedCustomerDropdownIndex(prev => (prev + 1) % totalOptions);
+                } else if (e.key === 'ArrowUp') {
+                  e.preventDefault();
+                  setSelectedCustomerDropdownIndex(prev => prev === 0 ? totalOptions - 1 : prev - 1);
+                } else if (e.key === 'Enter') {
+                  e.preventDefault();
+                  
+                  // Check if selecting a customer or the "Use as Walk-in" option
+                  if (selectedCustomerDropdownIndex < matchingCustomers.length) {
+                    // Select existing customer
+                    const selectedCust = matchingCustomers[selectedCustomerDropdownIndex];
+                    setSelectedCustomer(selectedCust);
+                    setCustomerSearch('');
+                    setSelectedCustomerDropdownIndex(0);
+                  } else {
+                    // Use as walk-in customer
+                    setSelectedCustomer({ name: customerSearch, id: null });
+                    setCustomerSearch('');
+                    setSelectedCustomerDropdownIndex(0);
+                  }
+                } else if (e.key === 'Escape') {
+                  setCustomerSearch('');
+                  setSelectedCustomerDropdownIndex(0);
+                }
+              }}
               placeholder="Walk-in Customer"
               className="w-full pl-8 pr-3 py-1.5 border border-[#c3c6d5] rounded text-[12px] bg-[#f7f9fb]"
             />
             {customerSearch && (
-              <div className="absolute top-full left-0 right-0 bg-white border border-[#c3c6d5] rounded shadow-lg z-20 max-h-40 overflow-y-auto">
-                {customers.filter(c => c.name.toLowerCase().includes(customerSearch.toLowerCase())).map(c => (
-                  <button key={c.id} onClick={() => { setSelectedCustomer(c); setCustomerSearch('') }}
-                    className="w-full text-left px-3 py-2 text-[12px] hover:bg-[#f2f4f6] transition-colors">
-                    {c.name} {c.balance > 0 && <span className="text-red-500 text-[10px]">Bal: {fmt(c.balance)}</span>}
-                  </button>
-                ))}
+              <div className="absolute top-full left-0 right-0 bg-white border border-[#c3c6d5] rounded shadow-lg z-20 max-h-60 overflow-y-auto mt-1">
+                {/* Show matching customers */}
+                {customers.filter(c => c.name.toLowerCase().includes(customerSearch.toLowerCase())).length > 0 ? (
+                  <>
+                    {customers.filter(c => c.name.toLowerCase().includes(customerSearch.toLowerCase())).map((c, idx) => (
+                      <button 
+                        key={c.id} 
+                        onClick={() => { 
+                          setSelectedCustomer(c); 
+                          setCustomerSearch('');
+                          setSelectedCustomerDropdownIndex(0);
+                        }}
+                        className={`w-full text-left px-3 py-2 text-[12px] hover:bg-[#f2f4f6] transition-colors border-b border-[#eceef0] flex items-center gap-2 ${
+                          selectedCustomerDropdownIndex === idx ? 'bg-[#e3f2fd]' : ''
+                        }`}
+                      >
+                        <span className="material-symbols-outlined text-[14px] text-[#003c90]">person</span>
+                        <span className="flex-1">{c.name}</span>
+                        {c.balance > 0 && <span className="text-red-500 text-[10px] font-semibold">Bal: {fmt(c.balance)}</span>}
+                      </button>
+                    ))}
+                  </>
+                ) : (
+                  <div className="px-3 py-2 text-[11px] text-[#737784] italic">
+                    No matching customer found
+                  </div>
+                )}
+                
+                {/* Add new customer button */}
+                <button 
+                  onClick={() => {
+                    // Use the typed name as customer name
+                    setSelectedCustomer({ name: customerSearch, id: null })
+                    // Clear search to close dropdown
+                    setCustomerSearch('');
+                    setSelectedCustomerDropdownIndex(0);
+                  }}
+                  className={`w-full text-left px-3 py-2.5 text-[12px] bg-[#f7f9fb] hover:bg-[#eceef0] transition-colors flex items-center gap-2 border-t-2 border-[#003c90] ${
+                    selectedCustomerDropdownIndex === customers.filter(c => c.name.toLowerCase().includes(customerSearch.toLowerCase())).length ? 'bg-[#e3f2fd]' : ''
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-[14px] text-green-600">add_circle</span>
+                  <span className="text-[#003c90] font-semibold">Use "{customerSearch}" as Walk-in</span>
+                </button>
               </div>
             )}
           </div>
@@ -1053,8 +1249,16 @@ export default function FastBilling() {
                       {fmt(item.total)}
                     </td>
                     <td className="px-3 py-2 text-center">
-                      <button onClick={() => removeItem(idx)}
-                        className="px-2.5 py-1 bg-white hover:bg-red-50 border border-red-300 rounded text-red-600 hover:text-red-700 text-[11px] font-semibold transition-colors">
+                      <button 
+                        ref={el => {
+                          if (el) {
+                            inputRefs.current[`${idx}-delete-btn`] = el
+                          }
+                        }}
+                        onClick={() => removeItem(idx)}
+                        onKeyDown={e => handleCartKeyDown(e, idx, 'delete')}
+                        className="px-2.5 py-1 bg-white hover:bg-red-50 border border-red-300 rounded text-red-600 hover:text-red-700 text-[11px] font-semibold transition-colors focus:ring-2 focus:ring-red-300 focus:outline-none"
+                      >
                         Del
                       </button>
                     </td>
@@ -1166,13 +1370,28 @@ export default function FastBilling() {
             <div className="py-1.5 border-b border-[#eceef0] bg-red-50/30 px-2 rounded">
               <div className="flex items-center justify-between">
                 <span className="text-[#737784] font-semibold text-[12px]">Total Discount</span>
-                <span className="font-mono text-red-600 font-bold">- PKR {fmt(totalDiscAmt)}</span>
+                <span className="font-mono text-red-600 font-bold">- PKR {fmt(grandTotalDiscount)}</span>
               </div>
+              {(perItemDiscAmt > 0 || totalDiscAmt > 0) && (
+                <div className="flex flex-col gap-0.5 mt-1 text-[10px] text-[#737784]">
+                  {perItemDiscAmt > 0 && (
+                    <div className="flex justify-between">
+                      <span>Per-Item Disc:</span>
+                      <span className="font-mono">PKR {fmt(perItemDiscAmt)}</span>
+                    </div>
+                  )}
+                  {totalDiscAmt > 0 && (
+                    <div className="flex justify-between">
+                      <span>Overall Disc:</span>
+                      <span className="font-mono">PKR {fmt(totalDiscAmt)}</span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
             <div className="flex justify-between items-center py-1.5 border-b border-[#eceef0]">
               <span className="text-[#737784] font-medium flex items-center gap-1">
                 <span className="material-symbols-outlined text-[14px] text-green-600">trending_up</span>
-                Profit
               </span>
               <span className={`font-mono font-semibold ${finalProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                 PKR {fmt(finalProfit)}
@@ -1242,9 +1461,9 @@ export default function FastBilling() {
                   onClick={handleHoldBill}
                   disabled={items.length === 0}
                   className="py-2 border border-amber-500 text-amber-700 bg-amber-50 rounded text-[12px] font-semibold hover:bg-amber-100 transition-colors flex items-center justify-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Hold Bill"
+                  title="Hold Bill (F8)"
                 >
-                  <span className="material-symbols-outlined text-[16px]">pause</span>Hold
+                  <span className="material-symbols-outlined text-[16px]">pause</span>Hold (F8)
                 </button>
                 <button className="py-2 border border-[#c3c6d5] text-[#434653] rounded text-[12px] font-semibold hover:bg-[#f2f4f6] transition-colors flex items-center justify-center gap-1">
                   <span className="material-symbols-outlined text-[16px]">print</span>Quote
@@ -1271,10 +1490,140 @@ export default function FastBilling() {
       {printInvoice && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center">
           <div className="bg-white rounded-lg shadow-2xl max-w-[400px] max-h-[90vh] overflow-auto">
-            <InvoicePrint invoice={printInvoice} onClose={() => setPrintInvoice(null)} />
+            <InvoicePrint 
+              invoice={printInvoice} 
+              onClose={() => {
+                setPrintInvoice(null)
+                setAutoPrint(false)
+              }} 
+              autoPrint={autoPrint}
+            />
           </div>
         </div>
       )}
+
+      {/* Item History Modal (Ctrl+H) */}
+      <Modal
+        open={!!historyPopup}
+        onClose={() => setHistoryPopup(null)}
+        title={`Sales History — ${historyPopup?.name || ''}`}
+        width="max-w-4xl"
+      >
+        {historyLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="w-8 h-8 border-4 border-[#003c90]/20 border-t-[#003c90] rounded-full animate-spin" />
+            <span className="ml-3 text-[13px] text-[#737784]">Loading history...</span>
+          </div>
+        ) : historyPopup?.data ? (
+          <div className="space-y-4">
+            {/* Stats */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="p-3 bg-[#f7f9fb] rounded-lg border border-[#c3c6d5] text-center">
+                <p className="text-[10px] text-[#737784] font-semibold uppercase">Total Sales</p>
+                <p className="text-[20px] font-bold text-[#003c90]">{historyPopup.data.stats?.total_sales || 0}</p>
+              </div>
+              <div className="p-3 bg-[#f7f9fb] rounded-lg border border-[#c3c6d5] text-center">
+                <p className="text-[10px] text-[#737784] font-semibold uppercase">Total Qty Sold</p>
+                <p className="text-[20px] font-bold text-[#003c90]">{historyPopup.data.stats?.total_quantity || 0}</p>
+              </div>
+              <div className="p-3 bg-[#f7f9fb] rounded-lg border border-[#c3c6d5] text-center">
+                <p className="text-[10px] text-[#737784] font-semibold uppercase">Avg Price</p>
+                <p className="text-[20px] font-bold text-[#003c90]">PKR {fmt(historyPopup.data.stats?.avg_price || 0)}</p>
+              </div>
+            </div>
+
+            {/* History Table */}
+            {historyPopup.data.history?.length === 0 ? (
+              <div className="py-8 text-center text-[13px] text-[#737784]">No sales history found</div>
+            ) : (
+              <div className="border border-[#c3c6d5] rounded-lg overflow-hidden">
+                <div className="max-h-96 overflow-y-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead className="bg-[#f2f4f6] sticky top-0">
+                      <tr>
+                        <th className="px-3 py-2 text-[10px] font-bold text-[#434653] uppercase">Invoice</th>
+                        <th className="px-3 py-2 text-[10px] font-bold text-[#434653] uppercase">Date</th>
+                        <th className="px-3 py-2 text-[10px] font-bold text-[#434653] uppercase">Customer</th>
+                        <th className="px-3 py-2 text-[10px] font-bold text-[#434653] uppercase text-right">Qty</th>
+                        <th className="px-3 py-2 text-[10px] font-bold text-[#434653] uppercase text-right">Price</th>
+                        <th className="px-3 py-2 text-[10px] font-bold text-[#434653] uppercase text-right">Total</th>
+                        <th className="px-3 py-2 text-[10px] font-bold text-[#434653] uppercase text-right">Discount</th>
+                        <th className="px-3 py-2 text-[10px] font-bold text-[#434653] uppercase text-right">Net Total</th>
+                        <th className="px-3 py-2 text-[10px] font-bold text-[#434653] uppercase text-center">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#eceef0]">
+                      {historyPopup.data.history.map((sale, idx) => {
+                        const date = new Date(sale.sale_date)
+                        const dateStr = date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                        const timeStr = date.toLocaleTimeString('en-PK', { hour: '2-digit', minute: '2-digit', hour12: true })
+                        // Calculate discount:
+                        // 1. Item-level discount (discount_percent on item)
+                        // 2. Invoice-level discount (proportional share)
+                        const itemSubtotal = sale.qty * sale.sale_price
+                        const itemDisc = sale.discount_percent > 0 
+                          ? itemSubtotal * (sale.discount_percent / 100) 
+                          : 0
+                        // Invoice-level discount proportional to this item
+                        const invoiceDiscPct = (sale.invoice_sub_total > 0 && sale.invoice_discount > 0)
+                          ? (sale.invoice_discount / sale.invoice_sub_total) * 100
+                          : 0
+                        const invoiceDiscAmt = itemSubtotal * (invoiceDiscPct / 100)
+                        const totalDiscAmt = itemDisc + invoiceDiscAmt
+                        const discPct = itemSubtotal > 0 ? (totalDiscAmt / itemSubtotal * 100).toFixed(1) : 0
+                        const netTotal = itemSubtotal - totalDiscAmt // Total - Discount
+                        return (
+                          <tr key={idx} className="hover:bg-[#f7f9fb] transition-colors">
+                            <td className="px-3 py-2 text-[12px] font-mono font-semibold text-[#003c90]">{sale.invoice_no}</td>
+                            <td className="px-3 py-2 text-[11px] text-[#434653]">
+                              <div>{dateStr}</div>
+                              <div className="text-[10px] text-[#737784]">{timeStr}</div>
+                            </td>
+                            <td className="px-3 py-2 text-[11px] text-[#434653]">{sale.customer_name || 'Walk-in'}</td>
+                            <td className="px-3 py-2 text-[12px] font-mono font-bold text-right text-[#003c90]">{sale.qty}</td>
+                            <td className="px-3 py-2 text-[12px] font-mono text-right">{fmt(sale.sale_price)}</td>
+                            <td className="px-3 py-2 text-[12px] font-mono text-right">{fmt(itemSubtotal)}</td>
+                            <td className="px-3 py-2 text-right">
+                              {totalDiscAmt > 0 ? (
+                                <span className="text-[11px] font-mono text-red-600">
+                                  -{fmt(totalDiscAmt)}
+                                  <span className="text-[10px] text-[#737784] ml-1">({discPct}%)</span>
+                                </span>
+                              ) : (
+                                <span className="text-[11px] text-[#737784]">—</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 text-[12px] font-mono font-bold text-right text-green-600">{fmt(netTotal)}</td>
+                            <td className="px-3 py-2 text-center">
+                              <button
+                                onClick={() => {
+                                  setHistoryPopup(null)
+                                  navigate('/sales/return', { state: { invoiceNo: sale.invoice_no } })
+                                }}
+                                className="px-2 py-1 bg-red-50 border border-red-200 text-red-600 rounded text-[10px] font-semibold hover:bg-red-100 transition-colors flex items-center gap-1 mx-auto"
+                                title="Process Return"
+                              >
+                                <span className="material-symbols-outlined text-[12px]">undo</span>
+                                Return
+                              </button>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            <div className="text-[10px] text-[#737784] text-center">
+              Showing last {historyPopup.data.history?.length || 0} sales • Press Esc to close
+            </div>
+          </div>
+        ) : null}
+      </Modal>
     </div>
   )
 }
+
+

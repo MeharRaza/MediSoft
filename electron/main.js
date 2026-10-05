@@ -164,6 +164,8 @@ function setupUpdaterIPC() {
   ipcMain.handle('updater:getVersion', () => ({
     current: app.getVersion(),
   }))
+  
+  // No print handlers - using browser native print only
 }
 
 function sendToWindow(channel, data) {

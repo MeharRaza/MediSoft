@@ -14,6 +14,8 @@ export default function CompanySettings() {
   const [checkingUpdate, setCheckingUpdate] = useState(false)
   const [backupInfo, setBackupInfo] = useState(null)
   const [backupLoading, setBackupLoading] = useState(false)
+  const [syncing, setSyncing] = useState(false)
+  const [syncResult, setSyncResult] = useState(null)
 
   useEffect(() => {
     api.settings.getCompanyInfo().then(d => {
@@ -89,6 +91,40 @@ export default function CompanySettings() {
   const openBackupFolder = async () => {
     if (isElectron && window.api?.settings?.openBackupFolder) {
       await window.api.settings.openBackupFolder()
+    }
+  }
+
+  const fixStockData = async () => {
+    if (!isElectron || !window.api?.inventory?.syncQtySold) {
+      return setMsg({ type: 'error', text: 'Fix Stock feature only works in installed app.' })
+    }
+    
+    const confirmed = window.confirm(
+      '⚠️ Stock Data Fix\n\n' +
+      'This will:\n' +
+      '1. Fix return items with missing batch links\n' +
+      '2. Recalculate qty_sold for ALL batches from actual sales\n\n' +
+      'Result: All stock values will be accurate.\n\n' +
+      'Continue?'
+    )
+    
+    if (!confirmed) return
+    
+    setSyncing(true)
+    setMsg(null)
+    setSyncResult(null)
+    
+    try {
+      const result = await window.api.inventory.syncQtySold({ dryRun: false })
+      setSyncResult(result)
+      setMsg({ 
+        type: 'success', 
+        text: `✅ Stock fix complete!\n\nBatches updated: ${result.needsUpdate}\nNULL returns fixed: ${result.nullReturnsFixes}\nProducts corrected: ${result.productsAffected}`
+      })
+    } catch (err) {
+      setMsg({ type: 'error', text: `Failed: ${err.message}` })
+    } finally {
+      setSyncing(false)
     }
   }
 
@@ -204,6 +240,32 @@ export default function CompanySettings() {
                 <span className="material-symbols-outlined text-[16px]">folder_open</span>
                 Open Backup Folder
               </Btn>
+              
+              <div className="mt-4 pt-4 border-t border-[#e5e7eb]">
+                <Btn 
+                  type="button" 
+                  variant="danger" 
+                  size="md" 
+                  fullWidth 
+                  onClick={fixStockData}
+                  disabled={syncing}
+                >
+                  {syncing ? (
+                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <span className="material-symbols-outlined text-[16px]">sync</span>
+                  )}
+                  Fix Stock Data
+                </Btn>
+                
+                {syncResult && (
+                  <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded text-[10px] text-green-800">
+                    <div>✅ Synced: {syncResult.total} batches</div>
+                    <div>🔧 Fixed: {syncResult.needsUpdate} drifts</div>
+                    <div>⚠️ Oversold: {syncResult.oversold} batches</div>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded">

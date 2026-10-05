@@ -68,7 +68,7 @@ module.exports = (ipcMain) => {
           console.log(`✅ Verification - Product in database:`, verifyProduct)
         } else {
           console.log(`♻️ Updating existing product ID: ${productId}`)
-          // Update existing product prices
+          // Update existing product prices (use original purchase_price for trade_price display)
           db.prepare('UPDATE products SET trade_price=?,sale_price=?,updated_at=datetime(\'now\') WHERE id=?')
             .run(item.purchase_price||0, item.sale_price||item.purchase_price||0, productId)
           console.log(`✅ Product prices updated`)
@@ -78,11 +78,21 @@ module.exports = (ipcMain) => {
         // Use profit_percent from frontend (already includes discount and bonus)
         const profitPercent = item.profit_percent || 0
         
+        // Calculate effective purchase price (considering bonus and discount)
+        // This is what each unit actually costs after all adjustments
+        const boxes = parseInt(item.qty_in_boxes) || 0
+        const bonusBoxes = parseInt(item.bonus) || 0
+        const totalBoxes = boxes + bonusBoxes
+        const discountMultiplier = 1 - (parseFloat(item.discount_percent) || 0) / 100
+        const effectivePurchasePrice = totalBoxes > 0
+          ? (parseFloat(item.purchase_price) * boxes * discountMultiplier) / totalBoxes
+          : parseFloat(item.purchase_price) || 0
+        
         const purchaseItemResult = db.prepare(`
           INSERT INTO purchase_items (purchase_id,product_id,expiry_date,purchase_price,sale_price,qty,qty_in_boxes,qty_loose,pcs_in_pack,qty_sold,bonus,discount_percent,total,profit_percent)
           VALUES (?,?,?,?,?,?,?,?,?,0,?,?,?,?)
         `).run(purchaseId, productId, item.expiry_date||null,
-              item.purchase_price||0, item.sale_price||0, item.qty, 
+              effectivePurchasePrice, item.sale_price||0, item.qty, 
               item.qty_in_boxes||0, item.qty_loose||0, item.pcs_in_pack||1,
               item.bonus||0, item.discount_percent||0, item.total, profitPercent)
         

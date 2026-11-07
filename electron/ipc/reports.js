@@ -80,45 +80,68 @@ module.exports = (ipcMain) => {
     const from = filters.from_date || new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0]
     const to   = filters.to_date   || new Date().toISOString().split('T')[0]
     
-    // Total Sales Revenue
-    const grossSales = db.prepare(`SELECT COALESCE(SUM(grand_total),0) as t FROM sales WHERE date(created_at) BETWEEN ? AND ? AND status!='voided'`).get(from, to).t
+    // Total Sales Revenue (Gross Sales)
+    const grossSales = db.prepare(`
+      SELECT COALESCE(SUM(grand_total),0) as t 
+      FROM sales 
+      WHERE date(created_at) BETWEEN ? AND ? AND status!='voided'
+    `).get(from, to).t
     
     // Total Returns
-    const totalReturns = db.prepare(`SELECT COALESCE(SUM(total),0) as t FROM sale_returns WHERE date(created_at) BETWEEN ? AND ?`).get(from, to).t
+    const totalReturns = db.prepare(`
+      SELECT COALESCE(SUM(total),0) as t 
+      FROM sale_returns 
+      WHERE date(created_at) BETWEEN ? AND ?
+    `).get(from, to).t
     
     // Net Revenue (Sales - Returns)
     const revenue = grossSales - totalReturns
     
-    // Cost of Goods Sold (only for sold items, not returned)
-    const soldCogs = db.prepare(`
-      SELECT COALESCE(SUM(si.qty * COALESCE((pi.purchase_price / CASE WHEN pi.pcs_in_pack IS NULL OR pi.pcs_in_pack = 0 THEN 1 ELSE pi.pcs_in_pack END),0)),0) as t
-      FROM sale_items si 
-      JOIN sales s ON s.id=si.sale_id 
-      LEFT JOIN purchase_items pi ON pi.id=si.purchase_item_id
-      WHERE date(s.created_at) BETWEEN ? AND ? AND s.status!='voided'`).get(from, to).t
+    // Total Purchases (Cost)
+    const totalPurchases = db.prepare(`
+      SELECT COALESCE(SUM(grand_total),0) as t
+      FROM purchases
+      WHERE date(created_at) BETWEEN ? AND ?
+    `).get(from, to).t
     
-    // Cost of Returned Goods (COGS that should be subtracted)
-    // Now using purchase_item_id directly from sale_return_items (more accurate)
-    const returnedCogs = db.prepare(`
-      SELECT COALESCE(SUM(sri.qty * COALESCE((pi.purchase_price / CASE WHEN pi.pcs_in_pack IS NULL OR pi.pcs_in_pack = 0 THEN 1 ELSE pi.pcs_in_pack END),0)),0) as t
-      FROM sale_return_items sri
-      JOIN sale_returns sr ON sr.id=sri.return_id
-      LEFT JOIN purchase_items pi ON pi.id=sri.purchase_item_id
-      WHERE date(sr.created_at) BETWEEN ? AND ?`).get(from, to).t
+    // Purchase Returns (reduce cost)
+    const purchaseReturns = db.prepare(`
+      SELECT COALESCE(SUM(total),0) as t
+      FROM purchase_returns
+      WHERE date(created_at) BETWEEN ? AND ?
+    `).get(from, to).t
     
-    // Net COGS (Sold COGS - Returned COGS)
-    const cogs = soldCogs - returnedCogs
+    // Net Cost of Purchases
+    const cogs = totalPurchases - purchaseReturns
     
-    // Gross Profit = Net Revenue - Net COGS
+    // Gross Profit = Net Revenue - Net Purchases
     const grossProfit = revenue - cogs
     
+    // Get expenses from expenses table
     const expenses = db.prepare(`
-      SELECT a.name, SUM(ve.debit - ve.credit) as amount FROM voucher_entries ve
-      JOIN accounts a ON a.id=ve.account_id JOIN vouchers v ON v.id=ve.voucher_id
-      WHERE a.type='expense' AND v.date BETWEEN ? AND ?
-      GROUP BY ve.account_id`).all(from, to)
-    const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0)
+      SELECT category as name, SUM(amount) as amount 
+      FROM expenses
+      WHERE date BETWEEN ? AND ?
+      GROUP BY category
+      ORDER BY amount DESC
+    `).all(from, to)
+    
+    const totalExpenses = db.prepare(`
+      SELECT COALESCE(SUM(amount), 0) as t
+      FROM expenses
+      WHERE date BETWEEN ? AND ?
+    `).get(from, to).t
+    
+    // Net Profit = Gross Profit - Expenses
     const netProfit = grossProfit - totalExpenses
+    
+    console.log('📊 Profit & Loss Calculation:')
+    console.log('  Sales Revenue:', revenue)
+    console.log('  COGS (Purchases):', cogs)
+    console.log('  Gross Profit:', grossProfit)
+    console.log('  Total Expenses:', totalExpenses)
+    console.log('  Net Profit:', netProfit)
+    console.log('  Date Range:', from, 'to', to)
     
     return { 
       revenue, 
@@ -132,8 +155,8 @@ module.exports = (ipcMain) => {
       // Additional details for transparency
       grossSales,
       totalReturns,
-      soldCogs,
-      returnedCogs
+      totalPurchases,
+      purchaseReturns
     }
   })
 

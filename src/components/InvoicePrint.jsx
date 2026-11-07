@@ -89,6 +89,11 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false }) {
   }, []) || []
 
   console.log('🔄 Original items:', invoice.items?.length, '→ Grouped items:', groupedItems.length)
+  console.log('📊 Item discounts:', groupedItems.map(i => ({ 
+    name: i.product_name, 
+    discount_percent: i.discount_percent,
+    has_discount: (i.discount_percent || 0) > 0
+  })))
 
   const date = new Date(invoice.created_at)
   const dateStr = date.toLocaleDateString('en-PK', { day: '2-digit', month: '2-digit', year: 'numeric' })
@@ -203,33 +208,44 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false }) {
         
         <div className="line"></div>
         
-        {/* Items Header - Grid Layout */}
+        {/* Items Header - Grid Layout with Discount column */}
         <div style={{ 
           display: 'grid',
-          gridTemplateColumns: '45% 15% 20% 20%',
-          fontSize: '11px',
-          marginBottom: '3px'
+          gridTemplateColumns: '40% 12% 16% 16% 16%',
+          fontSize: '10px',
+          marginBottom: '3px',
+          fontWeight: 'bold'
         }}>
-          <div>Item Name</div>
+          <div>Item</div>
           <div style={{ textAlign: 'right' }}>Qty</div>
           <div style={{ textAlign: 'right' }}>Price</div>
+          <div style={{ textAlign: 'right' }}>Disc</div>
           <div style={{ textAlign: 'right' }}>Total</div>
         </div>
         
-        {/* Items - Single Row per Item (Merged by product name) */}
-        {groupedItems.map((item, idx) => (
-          <div key={idx} style={{ 
-            display: 'grid',
-            gridTemplateColumns: '45% 15% 20% 20%',
-            fontSize: '11px',
-            marginBottom: '3px'
-          }}>
-            <div>{item.product_name}</div>
-            <div style={{ textAlign: 'right' }}>{item.qty}</div>
-            <div style={{ textAlign: 'right' }}>{fmt(item.sale_price)}</div>
-            <div style={{ textAlign: 'right' }}>{fmt(item.total)}</div>
-          </div>
-        ))}
+        {/* Items - Single Row per Item (Merged by product name) with Discount */}
+        {groupedItems.map((item, idx) => {
+          // Calculate per-item discount amount
+          const itemBase = item.qty * item.sale_price
+          const itemDiscAmt = itemBase * ((item.discount_percent || 0) / 100)
+          
+          return (
+            <div key={idx} style={{ 
+              display: 'grid',
+              gridTemplateColumns: '40% 12% 16% 16% 16%',
+              fontSize: '10px',
+              marginBottom: '2px'
+            }}>
+              <div style={{ fontSize: '11px', fontWeight: '500' }}>{item.product_name}</div>
+              <div style={{ textAlign: 'right' }}>{item.qty}</div>
+              <div style={{ textAlign: 'right' }}>{fmt(item.sale_price)}</div>
+              <div style={{ textAlign: 'right' }}>
+                {itemDiscAmt > 0 ? fmt(itemDiscAmt) : '-'}
+              </div>
+              <div style={{ textAlign: 'right', fontWeight: 'bold' }}>{fmt(item.total)}</div>
+            </div>
+          )
+        })}
         
         <div className="line"></div>
         

@@ -28,6 +28,7 @@ contextBridge.exposeInMainWorld('api', {
     createQuotation: (data) => ipcRenderer.invoke('sales:createQuotation', data),
     convertQuotation:(id) => ipcRenderer.invoke('sales:convertQuotation', id),
     getCustomers:    () => ipcRenderer.invoke('sales:getCustomers'),
+    getRecentWalkInNames: () => ipcRenderer.invoke('sales:getRecentWalkInNames'),
     createCustomer:  (data) => ipcRenderer.invoke('sales:createCustomer', data),
     updateCustomer:  (data) => ipcRenderer.invoke('sales:updateCustomer', data),
     deleteCustomer:  (id) => ipcRenderer.invoke('sales:deleteCustomer', id),
@@ -102,6 +103,15 @@ contextBridge.exposeInMainWorld('api', {
     getProfitLoss:      (filters) => ipcRenderer.invoke('reports:getProfitLoss', filters),
     getAccountsReport:  (filters) => ipcRenderer.invoke('reports:getAccountsReport', filters),
     getExpiryReport:    (filters) => ipcRenderer.invoke('reports:getExpiryReport', filters),
+  },
+  // Expenses
+  expenses: {
+    getExpenses:       (filters) => ipcRenderer.invoke('expenses:getExpenses', filters),
+    getTotalExpenses:  (filters) => ipcRenderer.invoke('expenses:getTotalExpenses', filters),
+    createExpense:     (data) => ipcRenderer.invoke('expenses:createExpense', data),
+    updateExpense:     (data) => ipcRenderer.invoke('expenses:updateExpense', data),
+    deleteExpense:     (id) => ipcRenderer.invoke('expenses:deleteExpense', id),
+    getCategories:     () => ipcRenderer.invoke('expenses:getCategories'),
   },
   // Settings
   settings: {

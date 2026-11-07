@@ -258,6 +258,31 @@ function runMigrations() {
       console.log('✅ sales table already has customer_name column')
     }
     
+    // Migration: Create expenses table if it doesn't exist
+    const expensesTableExists = db.prepare(`
+      SELECT name FROM sqlite_master WHERE type='table' AND name='expenses'
+    `).get()
+    
+    if (!expensesTableExists) {
+      console.log('🔄 Running migration: Creating expenses table...')
+      db.exec(`
+        CREATE TABLE expenses (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          date DATE NOT NULL,
+          description TEXT NOT NULL,
+          category TEXT,
+          amount REAL NOT NULL,
+          payment_method TEXT DEFAULT 'cash',
+          notes TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `)
+      console.log('✅ Migration complete: expenses table created')
+    } else {
+      console.log('✅ expenses table already exists')
+    }
+    
     console.log('✅ All migrations checked and applied successfully!')
   } catch (err) {
     console.error('❌ Migration error:', err.message)

@@ -227,6 +227,7 @@ app.whenReady().then(() => {
     require('./ipc/accounts')(ipcMain)
     require('./ipc/hrm')(ipcMain)
     require('./ipc/reports')(ipcMain)
+    require('./ipc/expenses')(ipcMain)
     require('./ipc/settings')(ipcMain)
     require('./ipc/fix-pcs')(ipcMain)
     setupUpdaterIPC()

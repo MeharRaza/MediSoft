@@ -77,11 +77,11 @@ export function Input({ label, value, onChange, type = 'text', placeholder = '',
   )
 }
 
-export function Select({ label, value, onChange, options = [], required = false, className = '' }) {
+export function Select({ label, value, onChange, options = [], required = false, className = '', id }) {
   return (
     <div className={className}>
       {label && <label className="block text-[11px] font-semibold text-[#434653] mb-1 uppercase tracking-wide">{label}</label>}
-      <select value={value} onChange={onChange} required={required}
+      <select id={id} value={value} onChange={onChange} required={required}
         className="w-full px-3 py-1.5 border border-[#c3c6d5] rounded bg-[#f7f9fb] text-[13px] text-[#191c1e] focus:border-[#003c90] focus:bg-white transition-colors">
         {options.map(opt => (
           <option key={opt.value} value={opt.value}>{opt.label}</option>

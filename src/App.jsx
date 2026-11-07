@@ -30,6 +30,7 @@ import SalesReport from './pages/reports/SalesReport'
 import PurchaseReport from './pages/reports/PurchaseReport'
 import StockReport from './pages/reports/StockReport'
 import ProfitLoss from './pages/reports/ProfitLoss'
+import Expenses from './pages/reports/Expenses'
 import ExpiryReport from './pages/reports/ExpiryReport'
 import CompanySettings from './pages/settings/CompanySettings'
 import UserManagement from './pages/settings/UserManagement'
@@ -92,6 +93,7 @@ export default function App() {
           <Route path="reports/purchase" element={<PurchaseReport />} />
           <Route path="reports/stock"    element={<StockReport />} />
           <Route path="reports/pl"       element={<ProfitLoss />} />
+          <Route path="reports/expenses" element={<Expenses />} />
           <Route path="reports/expiry"   element={<ExpiryReport />} />
           {/* Settings */}
           <Route path="settings/company"  element={<CompanySettings />} />

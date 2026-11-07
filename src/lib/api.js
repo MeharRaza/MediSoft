@@ -110,6 +110,14 @@ export const api = {
     getAccountsReport:  (f) => isElectron ? window.api.reports.getAccountsReport(f) : Promise.resolve({ accounts: [], ledger: [] }),
     getExpiryReport:    (f) => isElectron ? window.api.reports.getExpiryReport(f) : Promise.resolve({ expired: [], expiring30: [], expiring90: [] }),
   },
+  expenses: {
+    getExpenses:      (f) => isElectron ? window.api.expenses.getExpenses(f) : Promise.resolve([]),
+    getTotalExpenses: (f) => isElectron ? window.api.expenses.getTotalExpenses(f) : Promise.resolve(0),
+    createExpense:    (data) => isElectron ? window.api.expenses.createExpense(data) : Promise.resolve({ success: true, id: 99 }),
+    updateExpense:    (data) => isElectron ? window.api.expenses.updateExpense(data) : Promise.resolve({ success: true }),
+    deleteExpense:    (id) => isElectron ? window.api.expenses.deleteExpense(id) : Promise.resolve({ success: true }),
+    getCategories:    () => isElectron ? window.api.expenses.getCategories() : Promise.resolve([]),
+  },
   settings: {
     getUsers:        () => isElectron ? window.api.settings.getUsers() : Promise.resolve([]),
     createUser:      (data) => isElectron ? window.api.settings.createUser(data) : Promise.resolve({ success: true }),

@@ -395,6 +395,21 @@ module.exports = (ipcMain) => {
   })
 
   ipcMain.handle('sales:getCustomers', () => db.prepare('SELECT * FROM customers WHERE is_active=1 ORDER BY name').all())
+  
+  // Get recent walk-in customer names from sales history
+  ipcMain.handle('sales:getRecentWalkInNames', () => {
+    return db.prepare(`
+      SELECT customer_name as name
+      FROM sales
+      WHERE customer_name IS NOT NULL
+        AND customer_id IS NULL
+        AND customer_name != ''
+      GROUP BY customer_name
+      ORDER BY MAX(id) DESC
+      LIMIT 50
+    `).all()
+  })
+  
   ipcMain.handle('sales:createCustomer', (_, data) => {
     const r = db.prepare(`INSERT INTO customers (name,phone,address,opening_balance,balance,discount_percent) VALUES (?,?,?,?,?,?)`)
       .run(data.name, data.phone||null, data.address||null, data.opening_balance||0, data.opening_balance||0, data.discount_percent||0)

@@ -265,6 +265,44 @@ export default function PurchaseEntry() {
         }
         return
       }
+      
+      // Ctrl+U → Focus on Supplier field
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'u') {
+        e.preventDefault()
+        e.stopPropagation()
+        console.log('⌨️ Ctrl+U pressed - Focusing supplier field...')
+        
+        const supplierSelect = document.getElementById('supplier-select')
+        if (supplierSelect) {
+          supplierSelect.focus()
+          
+          // Open the dropdown by triggering a click event
+          setTimeout(() => {
+            try {
+              // Try modern showPicker API first (if supported)
+              if (supplierSelect.showPicker) {
+                supplierSelect.showPicker()
+              } else {
+                // Fallback: trigger mousedown event to open dropdown
+                const mousedownEvent = new MouseEvent('mousedown', {
+                  view: window,
+                  bubbles: true,
+                  cancelable: true
+                })
+                supplierSelect.dispatchEvent(mousedownEvent)
+              }
+              console.log('✅ Supplier dropdown opened')
+            } catch (err) {
+              console.warn('⚠️ Could not open dropdown:', err.message)
+            }
+          }, 100)
+          
+          console.log('✅ Focused on supplier field')
+        } else {
+          console.error('❌ Supplier select not found!')
+        }
+        return
+      }
     }
     
     window.addEventListener('keydown', handleKeyDown)
@@ -429,6 +467,52 @@ export default function PurchaseEntry() {
     // Also update company search field to show the auto-filled company
     if (p.company_name) {
       setCompanySearch(cs => ({ ...cs, [idx]: p.company_name }))
+    }
+  }
+  
+  // NEW: Update product name in database when edited
+  const handleProductNameBlur = (idx) => {
+    const item = items[idx]
+    const newName = productSearch[idx] || item.product_name
+    
+    // Only update if:
+    // 1. Product exists (has product_id)
+    // 2. Name was changed
+    // 3. New name is not empty
+    if (item.product_id && newName && newName.trim() !== '') {
+      // Get the original product to check if name actually changed
+      api.inventory.getProducts({ loadAll: true }).then(products => {
+        const originalProduct = products.find(p => p.id === item.product_id)
+        
+        if (originalProduct && originalProduct.name !== newName.trim()) {
+          console.log(`📝 Product name changed: "${originalProduct.name}" → "${newName.trim()}"`)
+          
+          // Update product in database
+          api.inventory.updateProduct({
+            id: item.product_id,
+            name: newName.trim(),
+            generic_name: item.company_name || originalProduct.company_name || '',
+            barcode: item.barcode || originalProduct.barcode || '',
+            rack_location: item.rack_location || originalProduct.rack_location || '',
+            pcs_in_pack: item.pcs_in_pack || originalProduct.pcs_in_pack || 1,
+            sale_price: item.sale_price || originalProduct.sale_price || 0,
+            trade_price: item.purchase_price || originalProduct.trade_price || 0,
+            alert_qty: originalProduct.alert_qty || 0,
+            category_id: originalProduct.category_id || null
+          }).then(() => {
+            console.log('✅ Product name updated successfully')
+            // Update the item's product_name to the trimmed version
+            const updated = [...items]
+            updated[idx].product_name = newName.trim()
+            setItems(updated)
+            setProductSearch(ps => ({ ...ps, [idx]: newName.trim() }))
+          }).catch(err => {
+            console.error('❌ Error updating product name:', err)
+          })
+        }
+      }).catch(err => {
+        console.error('❌ Error loading products:', err)
+      })
     }
   }
 
@@ -992,7 +1076,7 @@ export default function PurchaseEntry() {
         {/* Header Form */}
         <Card className="p-5">
           <div className="grid grid-cols-4 gap-4">
-            <Select label="Supplier" value={form.supplier_id} onChange={e => setForm({ ...form, supplier_id: e.target.value })} options={supplierOpts} />
+            <Select id="supplier-select" label="Supplier" value={form.supplier_id} onChange={e => setForm({ ...form, supplier_id: e.target.value })} options={supplierOpts} />
             <Input label="Invoice Number" value={form.invoice_no} onChange={e => setForm({ ...form, invoice_no: e.target.value })} placeholder="INV-2024-0001" required />
             <Input label="Invoice Date" type="date" value={form.invoice_date} onChange={e => setForm({ ...form, invoice_date: e.target.value })} />
           </div>
@@ -1126,8 +1210,8 @@ export default function PurchaseEntry() {
             </div>
           )}
           
-          <div className="overflow-x-auto overflow-y-auto" style={{maxHeight: '400px'}}>
-            <table className="w-full text-left border-collapse">
+          <div className="overflow-x-auto" style={{maxHeight: '400px', overflowY: 'auto'}}>
+            <table className="w-full text-left border-collapse" style={{position: 'relative'}}>
               <thead className="sticky top-0 bg-[#f2f4f6] z-20 shadow-sm">
                 <tr className="bg-[#f2f4f6] border-b-2 border-[#003c90]">
                   {['Product Name','Company','Rack','pcs/pack','Expiry','Purchase/Box','Sale/Box','Boxes','Loose','Total Qty','Bonus','Disc%','Net Amt','Profit%',''].map(h => <th key={h} className={`px-3 py-2.5 text-[11px] font-bold text-[#434653] uppercase tracking-wider whitespace-nowrap bg-[#f2f4f6] ${['pcs/pack','Purchase/Box','Sale/Box','Boxes','Loose','Total Qty','Bonus','Disc%','Net Amt','Profit%'].includes(h)?'text-right':''}`}>{h}</th>)}
@@ -1143,6 +1227,7 @@ export default function PurchaseEntry() {
                         id={`product-search-${idx}`}
                         value={productSearch[idx]!==undefined?productSearch[idx]:(item.product_name||'')} 
                         onChange={e => handleProductSearch(idx, e.target.value)} 
+                        onBlur={() => handleProductNameBlur(idx)}
                         onFocus={e => {
                           const rect = e.target.getBoundingClientRect()
                           setDropdownPosition(p => ({...p, [idx]: {top: rect.bottom + 4, left: rect.left}}))
@@ -1188,38 +1273,26 @@ export default function PurchaseEntry() {
                     </div>
                   </td>
                   {/* Company Name - Autocomplete */}
-                  <td className="px-3 py-2">
-                    <div className="relative">
-                      <input 
-                        type="text" 
-                        value={companySearch[idx]!==undefined?companySearch[idx]:(item.company_name||'')} 
-                        onChange={e => handleCompanySearch(idx, e.target.value)} 
-                        onKeyDown={e => {
-                          const results = companyResults[idx] || []
-                          if (e.key === 'Enter' && results.length > 0) {
-                            e.preventDefault()
-                            selectCompany(idx, results[0])
-                          }
-                        }}
-                        placeholder="Type company..." 
-                        className="w-32 px-2 py-1 border border-[#c3c6d5] rounded text-[12px] focus:border-[#003c90] bg-transparent" 
-                      />
-                      {/* Company Autocomplete Dropdown */}
-                      {companyResults[idx] && companyResults[idx].length > 0 && (
-                        <div className="absolute z-50 top-full left-0 mt-1 w-48 bg-white border border-[#c3c6d5] rounded shadow-lg max-h-32 overflow-y-auto">
-                          {companyResults[idx].map((comp, compIdx) => (
-                            <button
-                              key={compIdx}
-                              type="button"
-                              onClick={() => selectCompany(idx, comp)}
-                              className="w-full text-left px-2 py-1.5 text-[11px] hover:bg-[#f2f4f6] transition-colors"
-                            >
-                              {comp.name}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
+                  <td className="px-3 py-2 relative">
+                    <input 
+                      type="text" 
+                      id={`company-search-${idx}`}
+                      value={companySearch[idx]!==undefined?companySearch[idx]:(item.company_name||'')} 
+                      onChange={e => handleCompanySearch(idx, e.target.value)} 
+                      onFocus={e => {
+                        const rect = e.target.getBoundingClientRect()
+                        setDropdownPosition(p => ({...p, [`company-${idx}`]: {top: rect.bottom + window.scrollY + 4, left: rect.left + window.scrollX}}))
+                      }}
+                      onKeyDown={e => {
+                        const results = companyResults[idx] || []
+                        if (e.key === 'Enter' && results.length > 0) {
+                          e.preventDefault()
+                          selectCompany(idx, results[0])
+                        }
+                      }}
+                      placeholder="Type company..." 
+                      className="w-32 px-2 py-1 border border-[#c3c6d5] rounded text-[12px] focus:border-[#003c90] bg-transparent" 
+                    />
                   </td>
                   {/* Rack */}
                   <td className="px-3 py-2">
@@ -1317,6 +1390,40 @@ export default function PurchaseEntry() {
               </tbody>
             </table>
           </div>
+          
+          {/* Company Dropdown Portal - Fixed positioning outside table */}
+          {Object.keys(companyResults).map(idx => {
+            const results = companyResults[idx]
+            const position = dropdownPosition[`company-${idx}`]
+            
+            if (!results || results.length === 0 || !position) return null
+            
+            return (
+              <div
+                key={`company-dropdown-${idx}`}
+                className="fixed z-[9999] bg-white border-2 border-[#003c90] rounded shadow-2xl max-h-48 overflow-y-auto"
+                style={{
+                  top: `${position.top}px`,
+                  left: `${position.left}px`,
+                  width: '200px'
+                }}
+              >
+                {results.map((comp, compIdx) => (
+                  <button
+                    key={compIdx}
+                    type="button"
+                    onClick={() => {
+                      selectCompany(parseInt(idx), comp)
+                      setDropdownPosition(p => ({...p, [`company-${idx}`]: null}))
+                    }}
+                    className="w-full text-left px-3 py-2 text-[12px] font-medium hover:bg-[#003c90] hover:text-white transition-colors border-b border-[#eceef0] last:border-b-0"
+                  >
+                    {comp.name}
+                  </button>
+                ))}
+              </div>
+            )
+          })}
           
           {/* Add Row Button - Bottom */}
           <div className="px-4 py-3 border-t border-[#c3c6d5]">

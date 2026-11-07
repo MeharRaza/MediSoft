@@ -123,15 +123,83 @@ export default function FastBilling() {
   }, []) // Only run once on mount
 
   useEffect(() => {
-    api.sales.getCustomers().then(setCustomers)
+    // Load customers - with optional walk-in names if API exists
+    const loadCustomers = async () => {
+      try {
+        const registeredCustomers = await api.sales.getCustomers()
+        console.log('👥 Loaded customers:', registeredCustomers.length, 'registered')
+        
+        // Try to load walk-in names if the API exists
+        let walkInNames = []
+        if (api.sales.getRecentWalkInNames) {
+          try {
+            walkInNames = await api.sales.getRecentWalkInNames()
+            console.log('� Recent walk-in names:', walkInNames.length)
+          } catch (err) {
+            console.warn('⚠️ Could not load walk-in names:', err.message)
+          }
+        } else {
+          console.log('⚠️ Walk-in names API not available (old version)')
+        }
+        
+        // Combine: registered customers + walk-in names (with id: null)
+        const allCustomers = [
+          ...registeredCustomers,
+          ...walkInNames.map(w => ({ id: null, name: w.name, balance: 0 }))
+        ]
+        
+        // Remove duplicates (prefer registered customers)
+        const uniqueCustomers = allCustomers.reduce((acc, curr) => {
+          const existing = acc.find(c => c.name.toLowerCase() === curr.name.toLowerCase())
+          if (!existing) {
+            acc.push(curr)
+          } else if (curr.id !== null && existing.id === null) {
+            // Replace walk-in with registered customer
+            const idx = acc.indexOf(existing)
+            acc[idx] = curr
+          }
+          return acc
+        }, [])
+        
+        console.log('   Total unique:', uniqueCustomers.length, 'customers')
+        console.log('   First 5:', uniqueCustomers.slice(0, 5).map(c => c.name))
+        setCustomers(uniqueCustomers)
+      } catch (err) {
+        console.error('❌ Error loading customers:', err)
+        // Last resort fallback
+        try {
+          const customers = await api.sales.getCustomers()
+          setCustomers(customers)
+        } catch (e) {
+          console.error('❌ Critical: Cannot load customers:', e)
+        }
+      }
+    }
+    
+    loadCustomers()
     searchRef.current?.focus()
     
-    // Keyboard shortcuts
+    // Reload customers when window regains focus
+    const handleFocus = () => {
+      console.log('🔄 Window focused - reloading customers...')
+      loadCustomers()
+    }
+    
+    window.addEventListener('focus', handleFocus)
+    
+    return () => {
+      window.removeEventListener('focus', handleFocus)
+    }
+  }, [])
+
+  // Keyboard shortcuts - separate useEffect
+  useEffect(() => {
     const handle = (e) => {
       // Save Bill: Ctrl+S (case-insensitive)
       if (e.ctrlKey && e.key.toLowerCase() === 's') {
         e.preventDefault()
         e.stopPropagation()
+        console.log('⌨️ Ctrl+S pressed - saving...')
         handleFinishSaleRef.current?.()
         return
       }
@@ -140,6 +208,7 @@ export default function FastBilling() {
       if (e.ctrlKey && e.key.toLowerCase() === 'p') {
         e.preventDefault()
         e.stopPropagation()
+        console.log('⌨️ Ctrl+P pressed - saving with print...')
         handleFinishSaleWithPrintRef.current?.()
         return
       }
@@ -159,6 +228,53 @@ export default function FastBilling() {
         e.stopPropagation()
         document.getElementById('percent-discount-input')?.focus()
         document.getElementById('percent-discount-input')?.select()
+        return
+      }
+      
+      // Focus on Customer Name Field: Ctrl+N
+      if (e.ctrlKey && e.key.toLowerCase() === 'n') {
+        e.preventDefault()
+        e.stopPropagation()
+        document.getElementById('customer-search-input')?.focus()
+        document.getElementById('customer-search-input')?.select()
+        return
+      }
+      
+      // Reload Customers: Ctrl+R
+      if (e.ctrlKey && e.key.toLowerCase() === 'r') {
+        e.preventDefault()
+        e.stopPropagation()
+        console.log('🔄 Manual customer reload (Ctrl+R)...')
+        
+        api.sales.getCustomers().then(async (registeredCustomers) => {
+          let walkInNames = []
+          if (api.sales.getRecentWalkInNames) {
+            try {
+              walkInNames = await api.sales.getRecentWalkInNames()
+            } catch (err) {
+              console.warn('⚠️ Walk-in names failed:', err.message)
+            }
+          }
+          
+          const allCustomers = [
+            ...registeredCustomers,
+            ...walkInNames.map(w => ({ id: null, name: w.name, balance: 0 }))
+          ]
+          const uniqueCustomers = allCustomers.reduce((acc, curr) => {
+            const existing = acc.find(c => c.name.toLowerCase() === curr.name.toLowerCase())
+            if (!existing) {
+              acc.push(curr)
+            } else if (curr.id !== null && existing.id === null) {
+              const idx = acc.indexOf(existing)
+              acc[idx] = curr
+            }
+            return acc
+          }, [])
+          console.log('   Reloaded:', uniqueCustomers.length, 'customers')
+          setCustomers(uniqueCustomers)
+        }).catch(err => {
+          console.error('❌ Error reloading:', err)
+        })
         return
       }
       
@@ -203,9 +319,14 @@ export default function FastBilling() {
         return
       }
     }
+    
+    console.log('⌨️ Keyboard shortcuts registered')
     window.addEventListener('keydown', handle)
-    return () => window.removeEventListener('keydown', handle)
-  }, []) // Empty dependencies - functions are stable
+    return () => {
+      console.log('⌨️ Keyboard shortcuts unregistered')
+      window.removeEventListener('keydown', handle)
+    }
+  }, []) // Empty dependencies - functions are stable via refs
 
   // Product search
   useEffect(() => {
@@ -455,18 +576,12 @@ export default function FastBilling() {
       profit_percent: product.profit_percent
     })
     
-    // VALIDATION: Check if product has stock
-    if (!product.stock || product.stock <= 0) {
-      alert(`Cannot add "${product.name}" - Out of stock!`)
-      setSearchQ('')
-      setSearchResults([])
-      setSelectedIndex(-1)
-      searchRef.current?.focus()
-      return
-    }
+    // ALLOW adding zero-stock items to cart (for checking history)
+    // But track them for validation before saving
+    const hasZeroStock = !product.stock || product.stock <= 0
     
     // VALIDATION: Check if product has purchase_item_id
-    if (!product.current_purchase_item_id) {
+    if (!product.current_purchase_item_id && !hasZeroStock) {
       alert(`Cannot add "${product.name}" - No purchase record found. Please check inventory.`)
       setSearchQ('')
       setSearchResults([])
@@ -504,7 +619,7 @@ export default function FastBilling() {
         manufacturer_name: product.company_name || 'N/A',
         purchase_item_id: product.current_purchase_item_id || null,
         expiry_date: product.current_expiry || '',
-        qty: 1,
+        qty: hasZeroStock ? 0 : 1, // Set qty to 0 if zero stock
         sale_price: salePerPill, // Per pill for calculation
         purchase_price: purchasePerPill, // For profit calculation
         profit_percent: product.profit_percent || 0,
@@ -580,6 +695,14 @@ export default function FastBilling() {
   const handleFinishSale = useCallback(async () => {
     if (items.length === 0) return
     
+    // Check for zero-stock items
+    const zeroStockItems = items.filter(item => item.stock <= 0 || item.qty === 0)
+    if (zeroStockItems.length > 0) {
+      const names = zeroStockItems.map(i => i.name).join(', ')
+      alert(`❌ Cannot save bill!\n\nOut of stock items:\n${names}\n\nPlease remove these items or adjust stock before saving.`)
+      return
+    }
+    
     console.log('💰 Finishing sale with items:', items.map(i => ({
       product_id: i.product_id,
       name: i.name,
@@ -642,6 +765,14 @@ export default function FastBilling() {
   // Save and Print - for Ctrl+P
   const handleFinishSaleWithPrint = useCallback(async () => {
     if (items.length === 0) return
+    
+    // Check for zero-stock items
+    const zeroStockItems = items.filter(item => item.stock <= 0 || item.qty === 0)
+    if (zeroStockItems.length > 0) {
+      const names = zeroStockItems.map(i => i.name).join(', ')
+      alert(`❌ Cannot save bill!\n\nOut of stock items:\n${names}\n\nPlease remove these items or adjust stock before saving.`)
+      return
+    }
     
     console.log('💰🖨️ Finishing sale with print:', items.map(i => ({
       product_id: i.product_id,
@@ -947,9 +1078,16 @@ export default function FastBilling() {
               type="text"
               value={customerSearch || selectedCustomer?.name || ''}
               onChange={e => { 
-                setCustomerSearch(e.target.value); 
+                const searchVal = e.target.value
+                setCustomerSearch(searchVal); 
                 setSelectedCustomer(null);
                 setSelectedCustomerDropdownIndex(0); // Reset selection
+                
+                // Debug: Show matching customers
+                if (searchVal) {
+                  const matches = customers.filter(c => c.name.toLowerCase().includes(searchVal.toLowerCase()))
+                  console.log(`🔍 Search "${searchVal}": ${matches.length} matches`, matches.map(c => c.name))
+                }
               }}
               onKeyDown={e => {
                 if (!customerSearch) return;
@@ -1397,6 +1535,25 @@ export default function FastBilling() {
                 PKR {fmt(finalProfit)}
               </span>
             </div>
+            
+            {/* Zero Stock Warning */}
+            {items.some(item => item.stock <= 0 || item.qty === 0) && (
+              <div className="p-3 bg-red-50 border-2 border-red-500 rounded-lg">
+                <div className="flex items-start gap-2">
+                  <span className="material-symbols-outlined text-red-600 text-[20px]">warning</span>
+                  <div className="flex-1">
+                    <p className="text-red-700 font-bold text-[12px] mb-1">⚠️ OUT OF STOCK</p>
+                    <p className="text-red-600 text-[11px] leading-tight">
+                      {items.filter(i => i.stock <= 0 || i.qty === 0).map(i => i.name).join(', ')}
+                    </p>
+                    <p className="text-red-500 text-[10px] mt-2 italic">
+                      Remove these items to save the bill
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+            
             <div className="flex justify-between items-center p-3 bg-[#003c90]/5 rounded-lg border border-[#003c90]/20">
               <span className="text-[#003c90] font-bold text-[14px]">Grand Total</span>
               <span className="font-mono font-bold text-[#003c90] text-[20px]">PKR {fmt(grandTotal)}</span>

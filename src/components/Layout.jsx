@@ -57,6 +57,7 @@ const navItems = [
       { label: 'Purchase Report', path: '/reports/purchase', icon: 'trending_down' },
       { label: 'Stock Report', path: '/reports/stock', icon: 'inventory' },
       { label: 'Profit & Loss', path: '/reports/pl', icon: 'monitoring' },
+      { label: 'Expenses', path: '/reports/expenses', icon: 'payments' },
       { label: 'Expiry Report', path: '/reports/expiry', icon: 'event_busy' },
     ]
   },
@@ -214,6 +215,7 @@ export default function Layout() {
           'p': '/reports/purchase',
           't': '/reports/stock',
           'l': '/reports/pl',
+          'x': '/reports/expenses',
           'e': '/reports/expiry'
         }
         if (reportsMap[key]) {

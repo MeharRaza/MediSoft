@@ -303,6 +303,51 @@ export default function PurchaseEntry() {
         }
         return
       }
+      
+      // Ctrl+D → Delete current row
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') {
+        e.preventDefault()
+        e.stopPropagation()
+        console.log('⌨️ Ctrl+D pressed - Deleting current row...')
+        
+        // Find which row is currently focused
+        const focusedElement = document.activeElement
+        const currentRow = focusedElement.closest('tr')
+        
+        if (currentRow && currentRow.closest('tbody')) {
+          // Get the row index
+          const tbody = currentRow.closest('tbody')
+          const rows = Array.from(tbody.querySelectorAll('tr'))
+          const rowIndex = rows.indexOf(currentRow)
+          
+          console.log('📌 Deleting row index:', rowIndex)
+          
+          if (rowIndex >= 0 && items.length > 1) {
+            // Delete the row
+            const updatedItems = items.filter((_, idx) => idx !== rowIndex)
+            setItems(updatedItems)
+            console.log('✅ Row deleted successfully')
+            
+            // Focus on the same row index or previous row
+            setTimeout(() => {
+              const newRows = document.querySelectorAll('tbody tr')
+              const targetRow = newRows[Math.min(rowIndex, newRows.length - 1)]
+              if (targetRow) {
+                const firstInput = targetRow.querySelector('input')
+                if (firstInput) {
+                  firstInput.focus()
+                  firstInput.select()
+                }
+              }
+            }, 50)
+          } else if (items.length <= 1) {
+            console.log('⚠️ Cannot delete the last row')
+          }
+        } else {
+          console.error('❌ No row focused!')
+        }
+        return
+      }
     }
     
     window.addEventListener('keydown', handleKeyDown)
@@ -311,7 +356,7 @@ export default function PurchaseEntry() {
       window.removeEventListener('keydown', handleKeyDown)
       console.log('🗑️ Keyboard event listener removed')
     }
-  }, []) // Remove dependencies to avoid initialization issue
+  }, [items]) // Add items dependency for Ctrl+D
 
   // NEW: Load supplier's companies when supplier changes
   useEffect(() => {

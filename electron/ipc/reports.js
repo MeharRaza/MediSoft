@@ -135,15 +135,65 @@ module.exports = (ipcMain) => {
     // Net Profit = Gross Profit - Expenses
     const netProfit = grossProfit - totalExpenses
     
-    console.log('📊 Profit & Loss Calculation:')
+    console.log('📊 Cash Flow Calculation:')
     console.log('  Sales Revenue:', revenue)
-    console.log('  COGS (Purchases):', cogs)
+    console.log('  COGS (Total Purchases):', cogs)
     console.log('  Gross Profit:', grossProfit)
     console.log('  Total Expenses:', totalExpenses)
     console.log('  Net Profit:', netProfit)
     console.log('  Date Range:', from, 'to', to)
     
+    // ==========================================
+    // ACCRUAL METHOD: True Profit (Cost of Goods Actually Sold)
+    // ==========================================
+    
+    // Calculate actual COGS from sold items
+    const actualCOGS = db.prepare(`
+      SELECT COALESCE(SUM(
+        CASE 
+          WHEN pi.qty > 0 THEN (si.qty * (pi.purchase_price / pi.pcs_in_pack))
+          ELSE 0 
+        END
+      ), 0) as t
+      FROM sale_items si
+      JOIN sales s ON s.id = si.sale_id
+      LEFT JOIN purchase_items pi ON pi.id = si.purchase_item_id
+      WHERE date(s.created_at) BETWEEN ? AND ? 
+      AND s.status != 'voided'
+    `).get(from, to).t
+    
+    // Calculate COGS of returned items (reduce actual COGS)
+    const returnedCOGS = db.prepare(`
+      SELECT COALESCE(SUM(
+        CASE 
+          WHEN pi.qty > 0 THEN (sri.qty * (pi.purchase_price / pi.pcs_in_pack))
+          ELSE 0 
+        END
+      ), 0) as t
+      FROM sale_return_items sri
+      JOIN sale_returns sr ON sr.id = sri.return_id
+      LEFT JOIN purchase_items pi ON pi.id = sri.purchase_item_id
+      WHERE date(sr.created_at) BETWEEN ? AND ?
+    `).get(from, to).t
+    
+    // Net COGS = Items sold - Items returned
+    const netActualCOGS = actualCOGS - returnedCOGS
+    
+    // Gross Profit (Accrual) = Revenue - Actual COGS
+    const accrualGrossProfit = revenue - netActualCOGS
+    
+    // Net Profit (Accrual) = Gross Profit - Expenses
+    const accrualNetProfit = accrualGrossProfit - totalExpenses
+    
+    console.log('📊 Accrual/True Profit Calculation:')
+    console.log('  Sales Revenue:', revenue)
+    console.log('  Actual COGS (Items Sold):', netActualCOGS)
+    console.log('  Gross Profit:', accrualGrossProfit)
+    console.log('  Total Expenses:', totalExpenses)
+    console.log('  Net Profit:', accrualNetProfit)
+    
     return { 
+      // Cash Flow Method (Current)
       revenue, 
       cogs, 
       grossProfit, 
@@ -152,11 +202,20 @@ module.exports = (ipcMain) => {
       netProfit, 
       from, 
       to,
-      // Additional details for transparency
       grossSales,
       totalReturns,
       totalPurchases,
-      purchaseReturns
+      purchaseReturns,
+      
+      // Accrual Method (True Profit)
+      accrual: {
+        revenue,
+        actualCOGS: netActualCOGS,
+        grossProfit: accrualGrossProfit,
+        expenses,
+        totalExpenses,
+        netProfit: accrualNetProfit
+      }
     }
   })
 

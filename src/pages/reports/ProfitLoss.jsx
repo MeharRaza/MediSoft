@@ -30,18 +30,21 @@ export default function ProfitLoss() {
         </div></Card>
 
         {loading ? <div className="flex items-center justify-center py-16"><div className="w-10 h-10 border-4 border-[#003c90]/20 border-t-[#003c90] rounded-full animate-spin" /></div> : data && (
-          <div className="max-w-2xl mx-auto">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            
+            {/* CARD 1: Cash Flow Method (Current) */}
             <Card className="overflow-hidden">
               <div className="px-6 py-4 bg-[#003c90] text-white text-center">
-                <h3 className="text-[18px] font-bold">Profit & Loss Statement</h3>
-                <p className="text-[12px] text-white/70">{new Date(fromDate).toLocaleDateString()} — {new Date(toDate).toLocaleDateString()}</p>
+                <h3 className="text-[16px] font-bold">💰 Cash Flow Analysis</h3>
+                <p className="text-[11px] text-white/70">Money In vs Money Out</p>
+                <p className="text-[10px] text-white/60 mt-1">{new Date(fromDate).toLocaleDateString()} — {new Date(toDate).toLocaleDateString()}</p>
               </div>
               <div className="p-6 space-y-4">
                 {/* Revenue */}
                 <PLRow label="Sales Revenue" value={data.revenue} bold color="text-green-700" />
-                <PLRow label="Cost of Goods Sold" value={-data.cogs} color="text-[#ba1a1a]" />
+                <PLRow label="Total Purchases (All Stock Bought)" value={-data.cogs} color="text-[#ba1a1a]" />
                 <div className="border-t-2 border-[#c3c6d5] pt-3">
-                  <PLRow label="Gross Profit" value={data.grossProfit} bold color={data.grossProfit >= 0 ? 'text-green-700' : 'text-[#ba1a1a]'} />
+                  <PLRow label="Gross Profit/Loss" value={data.grossProfit} bold color={data.grossProfit >= 0 ? 'text-green-700' : 'text-[#ba1a1a]'} />
                 </div>
 
                 {data.expenses?.length > 0 && <div>
@@ -53,15 +56,58 @@ export default function ProfitLoss() {
                 <div className={`p-5 rounded-xl border-2 ${data.netProfit >= 0 ? 'bg-green-50 border-green-300' : 'bg-red-50 border-red-300'}`}>
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-[12px] font-bold text-[#434653] uppercase tracking-wider">NET {data.netProfit >= 0 ? 'PROFIT' : 'LOSS'}</p>
-                      <p className={`text-[32px] font-bold ${data.netProfit >= 0 ? 'text-green-700' : 'text-[#ba1a1a]'}`}>PKR {fmt(Math.abs(data.netProfit))}</p>
+                      <p className="text-[11px] font-bold text-[#434653] uppercase tracking-wider">NET {data.netProfit >= 0 ? 'PROFIT' : 'LOSS'}</p>
+                      <p className={`text-[28px] font-bold ${data.netProfit >= 0 ? 'text-green-700' : 'text-[#ba1a1a]'}`}>PKR {fmt(Math.abs(data.netProfit))}</p>
                     </div>
-                    <span className={`material-symbols-outlined text-[48px] ${data.netProfit >= 0 ? 'text-green-400' : 'text-red-300'}`}>{data.netProfit >= 0 ? 'trending_up' : 'trending_down'}</span>
+                    <span className={`material-symbols-outlined text-[40px] ${data.netProfit >= 0 ? 'text-green-400' : 'text-red-300'}`}>{data.netProfit >= 0 ? 'trending_up' : 'trending_down'}</span>
                   </div>
-                  {data.revenue > 0 && <p className="text-[12px] font-semibold text-[#737784] mt-2">Profit Margin: {((data.netProfit / data.revenue) * 100).toFixed(1)}%</p>}
+                  {data.revenue > 0 && <p className="text-[11px] font-semibold text-[#737784] mt-2">Margin: {((data.netProfit / data.revenue) * 100).toFixed(1)}%</p>}
+                </div>
+                
+                <div className="text-[11px] text-[#737784] bg-blue-50 p-3 rounded border border-blue-200">
+                  <strong>Note:</strong> This shows money you spent vs money you earned. Includes all purchases even if items are still in stock.
                 </div>
               </div>
             </Card>
+            
+            {/* CARD 2: Accrual Method (True Profit) */}
+            <Card className="overflow-hidden">
+              <div className="px-6 py-4 bg-green-700 text-white text-center">
+                <h3 className="text-[16px] font-bold">📊 True Profit Analysis</h3>
+                <p className="text-[11px] text-white/70">Based on Items Actually Sold</p>
+                <p className="text-[10px] text-white/60 mt-1">{new Date(fromDate).toLocaleDateString()} — {new Date(toDate).toLocaleDateString()}</p>
+              </div>
+              <div className="p-6 space-y-4">
+                {/* Revenue */}
+                <PLRow label="Sales Revenue" value={data.accrual.revenue} bold color="text-green-700" />
+                <PLRow label="Cost of Goods Sold (Only Sold Items)" value={-data.accrual.actualCOGS} color="text-[#ba1a1a]" />
+                <div className="border-t-2 border-[#c3c6d5] pt-3">
+                  <PLRow label="Gross Profit" value={data.accrual.grossProfit} bold color={data.accrual.grossProfit >= 0 ? 'text-green-700' : 'text-[#ba1a1a]'} />
+                </div>
+
+                {data.accrual.expenses?.length > 0 && <div>
+                  <p className="text-[11px] font-bold text-[#434653] uppercase tracking-wide mb-2">Operating Expenses</p>
+                  {data.accrual.expenses.map((e, i) => <PLRow key={i} label={e.name} value={-e.amount} indent />)}
+                  <PLRow label="Total Expenses" value={-data.accrual.totalExpenses} bold color="text-[#ba1a1a]" />
+                </div>}
+
+                <div className={`p-5 rounded-xl border-2 ${data.accrual.netProfit >= 0 ? 'bg-green-50 border-green-300' : 'bg-red-50 border-red-300'}`}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-[11px] font-bold text-[#434653] uppercase tracking-wider">NET {data.accrual.netProfit >= 0 ? 'PROFIT' : 'LOSS'}</p>
+                      <p className={`text-[28px] font-bold ${data.accrual.netProfit >= 0 ? 'text-green-700' : 'text-[#ba1a1a]'}`}>PKR {fmt(Math.abs(data.accrual.netProfit))}</p>
+                    </div>
+                    <span className={`material-symbols-outlined text-[40px] ${data.accrual.netProfit >= 0 ? 'text-green-400' : 'text-red-300'}`}>{data.accrual.netProfit >= 0 ? 'trending_up' : 'trending_down'}</span>
+                  </div>
+                  {data.accrual.revenue > 0 && <p className="text-[11px] font-semibold text-[#737784] mt-2">Profit Margin: {((data.accrual.netProfit / data.accrual.revenue) * 100).toFixed(1)}%</p>}
+                </div>
+                
+                <div className="text-[11px] text-[#737784] bg-green-50 p-3 rounded border border-green-200">
+                  <strong>Note:</strong> This shows true profit by only counting the cost of items you actually sold. Inventory still in stock is not counted as expense.
+                </div>
+              </div>
+            </Card>
+            
           </div>
         )}
       </div>

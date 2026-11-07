@@ -318,6 +318,54 @@ export default function FastBilling() {
         handleHoldBillRef.current?.()
         return
       }
+      
+      // Delete Current Row: Ctrl+D
+      if (e.ctrlKey && e.key.toLowerCase() === 'd') {
+        e.preventDefault()
+        e.stopPropagation()
+        console.log('⌨️ Ctrl+D pressed - Deleting current row...')
+        
+        // Find which cart row is currently focused
+        const focusedElement = document.activeElement
+        const currentRow = focusedElement.closest('tr')
+        
+        if (currentRow && currentRow.closest('tbody')) {
+          // Get the row index
+          const tbody = currentRow.closest('tbody')
+          const rows = Array.from(tbody.querySelectorAll('tr'))
+          const rowIndex = rows.indexOf(currentRow)
+          
+          console.log('📌 Deleting cart row index:', rowIndex)
+          
+          if (rowIndex >= 0 && items.length > 1) {
+            // Delete the row
+            const updatedItems = items.filter((_, idx) => idx !== rowIndex)
+            setItems(updatedItems)
+            console.log('✅ Cart row deleted successfully')
+            
+            // Focus on the same row index or previous row
+            setTimeout(() => {
+              const newRows = document.querySelectorAll('tbody tr')
+              const targetRow = newRows[Math.min(rowIndex, newRows.length - 1)]
+              if (targetRow) {
+                const firstInput = targetRow.querySelector('input')
+                if (firstInput) {
+                  firstInput.focus()
+                  firstInput.select()
+                }
+              }
+            }, 50)
+          } else if (items.length <= 1) {
+            // If only one item, clear it instead of deleting
+            setItems([])
+            searchRef.current?.focus()
+            console.log('⚠️ Last item cleared, focus returned to search')
+          }
+        } else {
+          console.error('❌ No cart row focused!')
+        }
+        return
+      }
     }
     
     console.log('⌨️ Keyboard shortcuts registered')
@@ -326,7 +374,7 @@ export default function FastBilling() {
       console.log('⌨️ Keyboard shortcuts unregistered')
       window.removeEventListener('keydown', handle)
     }
-  }, []) // Empty dependencies - functions are stable via refs
+  }, [items]) // Add items dependency for Ctrl+D to access current items state
 
   // Product search
   useEffect(() => {

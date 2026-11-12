@@ -53,6 +53,15 @@ function setupAutoUpdater() {
   const updater = getAutoUpdater()
   if (!updater) return
 
+  try {
+    updater.setFeedURL({
+      provider: 'generic',
+      url: 'https://posapi.asiansol.com/api/updates'
+    })
+  } catch (e) {
+    console.warn('[Updater] setFeedURL error:', e.message)
+  }
+
   // Disable auto download — we'll ask user first
   updater.autoDownload = false
   updater.autoInstallOnAppQuit = true
@@ -60,12 +69,16 @@ function setupAutoUpdater() {
   updater.allowPrerelease = false // Only stable releases
 
   // Check for updates every 30 minutes
-  setInterval(() => { updater.checkForUpdates() }, 30 * 60 * 1000)
+  setInterval(() => {
+    try { updater.checkForUpdates() } catch (e) {}
+  }, 30 * 60 * 1000)
 
   // Also check on startup (after 10 seconds to ensure app is fully loaded)
   setTimeout(() => { 
-    console.log('[Updater] Checking for updates... Current version:', app.getVersion())
-    updater.checkForUpdates() 
+    try {
+      console.log('[Updater] Checking for updates... Current version:', app.getVersion())
+      updater.checkForUpdates()
+    } catch (e) {}
   }, 10000)
 
   // ── Events ──
@@ -289,7 +302,13 @@ app.whenReady().then(() => {
   } catch (err) {
     logDebug('createWindow error: ' + (err.stack || err))
   }
-  // setupAutoUpdater() // Disabled: No update server running
+
+  try {
+    setupAutoUpdater()
+    logDebug('setupAutoUpdater initialized successfully')
+  } catch (err) {
+    logDebug('setupAutoUpdater error: ' + (err.stack || err))
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

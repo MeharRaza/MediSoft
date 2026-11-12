@@ -1,7 +1,7 @@
 {
   "name": "medisoft-pro",
   "private": true,
-  "version": "1.4.8",
+  "version": "1.4.9",
   "description": "MediSoft Pro — Pharmacy Management System",
   "main": "electron/main.js",
   "scripts": {
@@ -54,7 +54,7 @@
     "publish": [
       {
         "provider": "generic",
-        "url": "http://192.168.1.21:8080",
+        "url": "https://posapi.asiansol.com/api/updates",
         "channel": "latest"
       }
     ],

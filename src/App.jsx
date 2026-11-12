@@ -1,9 +1,11 @@
-import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from './store/authStore'
 import Layout from './components/Layout'
 import UpdateNotifier from './components/UpdateNotifier'
 import TaskSwitcher from './components/TaskSwitcher'
 import Login from './pages/Login'
+import Activation from './pages/Activation'
 import Dashboard from './pages/Dashboard'
 import FastBilling from './pages/sales/FastBilling'
 import SalesHistory from './pages/sales/SalesHistory'
@@ -36,8 +38,49 @@ import CompanySettings from './pages/settings/CompanySettings'
 import UserManagement from './pages/settings/UserManagement'
 import BranchManagement from './pages/settings/BranchManagement'
 
-// ─── REMOVED OLD NAVIGATION HISTORY ──────────────────────
-// Replaced with new TaskSwitcher component
+// ─── HARDWARE LICENSE GUARD ──────────────────────────────
+function LicenseGuard({ children }) {
+  const [status, setStatus] = useState(null)
+  const location = useLocation()
+
+  const verifyLicense = async () => {
+    try {
+      if (window.api?.license?.getStatus) {
+        const res = await window.api.license.getStatus()
+        setStatus(!!res.isActivated)
+      } else {
+        // Fallback if running outside Electron
+        setStatus(true)
+      }
+    } catch (err) {
+      console.error('[LicenseGuard] Error:', err)
+      setStatus(false)
+    }
+  }
+
+  useEffect(() => {
+    verifyLicense()
+  }, [location.pathname])
+
+  if (status === null) {
+    return (
+      <div className="min-h-screen bg-[#0f172a] flex items-center justify-center p-4">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin" />
+          <span className="text-white text-[13px] font-semibold tracking-wider">
+            Checking Hardware License...
+          </span>
+        </div>
+      </div>
+    )
+  }
+
+  if (!status) {
+    return <Navigate to="/activate" replace />
+  }
+
+  return children
+}
 
 function PrivateRoute({ children }) {
   const user = useAuthStore(s => s.user)
@@ -58,8 +101,9 @@ export default function App() {
     <HashRouter>
       <UpdateNotifier />
       <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/" element={<PrivateRoute><LayoutWithTaskSwitcher /></PrivateRoute>}>
+        <Route path="/activate" element={<Activation />} />
+        <Route path="/login" element={<LicenseGuard><Login /></LicenseGuard>} />
+        <Route path="/" element={<LicenseGuard><PrivateRoute><LayoutWithTaskSwitcher /></PrivateRoute></LicenseGuard>}>
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<Dashboard />} />
           {/* Sales */}

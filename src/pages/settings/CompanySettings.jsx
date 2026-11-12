@@ -16,6 +16,7 @@ export default function CompanySettings() {
   const [backupLoading, setBackupLoading] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [syncResult, setSyncResult] = useState(null)
+  const [licenseInfo, setLicenseInfo] = useState(null)
 
   useEffect(() => {
     api.settings.getCompanyInfo().then(d => {
@@ -29,6 +30,10 @@ export default function CompanySettings() {
     // Get backup info
     if (isElectron && window.api?.settings?.getBackupInfo) {
       window.api.settings.getBackupInfo().then(info => setBackupInfo(info))
+    }
+    // Get license info
+    if (isElectron && window.api?.license?.getStatus) {
+      window.api.license.getStatus().then(lic => setLicenseInfo(lic))
     }
   }, [])
 
@@ -178,6 +183,26 @@ export default function CompanySettings() {
                 </Btn>
               </div>
             </form>
+
+            {licenseInfo && (
+              <div className="mt-6 pt-4 border-t border-slate-200">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-emerald-600 text-[20px]">verified</span>
+                    <h4 className="text-[13px] font-bold text-slate-800">Hardware License & Registration</h4>
+                  </div>
+                  <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full ${licenseInfo.isActivated ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                    {licenseInfo.isActivated ? '● ACTIVATED (100% OFFLINE)' : '○ NOT ACTIVATED'}
+                  </span>
+                </div>
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 grid grid-cols-2 gap-2 text-[11px] text-slate-600">
+                  <div><strong>Store / Registered:</strong> {licenseInfo.license?.storeName || licenseInfo.license?.customerName || 'N/A'}</div>
+                  <div><strong>Counter Plan:</strong> {licenseInfo.license?.plan || 'Standard'}</div>
+                  <div><strong>License Key:</strong> <code className="font-mono text-blue-700 font-bold">{licenseInfo.license?.key || 'N/A'}</code></div>
+                  <div><strong>Hardware ID:</strong> <code className="font-mono font-bold text-slate-800">{licenseInfo.hwid}</code></div>
+                </div>
+              </div>
+            )}
           </Card>
 
           {/* Backup & Restore Section */}

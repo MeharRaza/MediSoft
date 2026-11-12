@@ -16,6 +16,13 @@ contextBridge.exposeInMainWorld('api', {
     onDownloaded:(cb)=> ipcRenderer.on('update:downloaded',(_, d) => cb(d)),
     onError:    (cb) => ipcRenderer.on('update:error',     (_, d) => cb(d)),
   },
+  // Hardware-Locked RSA Licensing
+  license: {
+    getStatus:  () => ipcRenderer.invoke('license:getStatus'),
+    getHwid:    () => ipcRenderer.invoke('license:getHwid'),
+    activate:   (key) => ipcRenderer.invoke('license:activate', key),
+    deactivate: () => ipcRenderer.invoke('license:deactivate'),
+  },
   // No custom print handlers
   // Sales
   sales: {

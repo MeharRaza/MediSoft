@@ -1,6 +1,28 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron')
 const path = require('path')
-const { autoUpdater } = require('electron-updater')
+const fs = require('fs')
+
+function logDebug(msg) {
+  try {
+    const logPath = path.join(app.getPath('userData'), 'main_debug.log')
+    fs.appendFileSync(logPath, `[${new Date().toISOString()}] ${msg}\n`)
+  } catch (e) {}
+}
+
+logDebug('Main process script evaluated')
+
+let autoUpdater = null
+function getAutoUpdater() {
+  if (!autoUpdater) {
+    try {
+      const eu = require('electron-updater')
+      autoUpdater = eu.autoUpdater
+    } catch (err) {
+      console.warn('[Updater] Could not load electron-updater:', err.message)
+    }
+  }
+  return autoUpdater
+}
 
 const isDev = process.env.NODE_ENV === 'development'
 
@@ -28,28 +50,31 @@ function compareVersions(v1, v2) {
 function setupAutoUpdater() {
   if (isDev) return // Don't check updates in dev mode
 
+  const updater = getAutoUpdater()
+  if (!updater) return
+
   // Disable auto download — we'll ask user first
-  autoUpdater.autoDownload = false
-  autoUpdater.autoInstallOnAppQuit = true
-  autoUpdater.allowDowngrade = false // Don't show updates for older versions
-  autoUpdater.allowPrerelease = false // Only stable releases
+  updater.autoDownload = false
+  updater.autoInstallOnAppQuit = true
+  updater.allowDowngrade = false // Don't show updates for older versions
+  updater.allowPrerelease = false // Only stable releases
 
   // Check for updates every 30 minutes
-  setInterval(() => { autoUpdater.checkForUpdates() }, 30 * 60 * 1000)
+  setInterval(() => { updater.checkForUpdates() }, 30 * 60 * 1000)
 
   // Also check on startup (after 10 seconds to ensure app is fully loaded)
   setTimeout(() => { 
     console.log('[Updater] Checking for updates... Current version:', app.getVersion())
-    autoUpdater.checkForUpdates() 
+    updater.checkForUpdates() 
   }, 10000)
 
   // ── Events ──
 
-  autoUpdater.on('checking-for-update', () => {
+  updater.on('checking-for-update', () => {
     sendToWindow('update:status', { status: 'checking' })
   })
 
-  autoUpdater.on('update-available', (info) => {
+  updater.on('update-available', (info) => {
     const currentVersion = app.getVersion()
     
     // Compare versions properly
@@ -80,18 +105,18 @@ function setupAutoUpdater() {
       cancelId: 1,
     }).then(({ response }) => {
       if (response === 0) {
-        autoUpdater.downloadUpdate()
+        updater.downloadUpdate()
         sendToWindow('update:status', { status: 'downloading', version: info.version })
       }
     })
   })
 
-  autoUpdater.on('update-not-available', (info) => {
+  updater.on('update-not-available', (info) => {
     console.log('[Updater] No update available. Current version:', app.getVersion())
     sendToWindow('update:status', { status: 'up-to-date' })
   })
 
-  autoUpdater.on('download-progress', (progress) => {
+  updater.on('download-progress', (progress) => {
     sendToWindow('update:progress', {
       percent: Math.round(progress.percent),
       transferred: progress.transferred,
@@ -102,7 +127,7 @@ function setupAutoUpdater() {
     if (mainWindow) mainWindow.setProgressBar(progress.percent / 100)
   })
 
-  autoUpdater.on('update-downloaded', (info) => {
+  updater.on('update-downloaded', (info) => {
     if (mainWindow) mainWindow.setProgressBar(-1)
     sendToWindow('update:downloaded', { version: info.version })
 
@@ -125,12 +150,12 @@ function setupAutoUpdater() {
         })
         
         // Set flag to force install
-        autoUpdater.quitAndInstall(false, true)
+        updater.quitAndInstall(false, true)
       }
     })
   })
 
-  autoUpdater.on('error', (err) => {
+  updater.on('error', (err) => {
     sendToWindow('update:error', { message: err.message })
     if (mainWindow) mainWindow.setProgressBar(-1)
     console.error('[Updater] Error:', err.message)
@@ -141,16 +166,20 @@ function setupAutoUpdater() {
 function setupUpdaterIPC() {
   ipcMain.handle('updater:check', () => {
     if (isDev) return { status: 'dev-mode' }
-    autoUpdater.checkForUpdates()
+    const updater = getAutoUpdater()
+    if (updater) updater.checkForUpdates()
     return { status: 'checking' }
   })
 
   ipcMain.handle('updater:download', () => {
-    autoUpdater.downloadUpdate()
+    const updater = getAutoUpdater()
+    if (updater) updater.downloadUpdate()
     return { status: 'downloading' }
   })
 
   ipcMain.handle('updater:install', () => {
+    const updater = getAutoUpdater()
+    if (!updater) return
     // Force quit and install with immediate restart
     const allWindows = BrowserWindow.getAllWindows()
     allWindows.forEach(win => {
@@ -158,7 +187,7 @@ function setupUpdaterIPC() {
         win.removeAllListeners('close')
       }
     })
-    autoUpdater.quitAndInstall(false, true)
+    updater.quitAndInstall(false, true)
   })
 
   ipcMain.handle('updater:getVersion', () => ({
@@ -201,7 +230,21 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
   }
 
+  mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
+    logDebug(`[Renderer] ${message} (${sourceId}:${line})`)
+  })
+  mainWindow.webContents.on('did-fail-load', (e, errorCode, errorDescription) => {
+    logDebug(`did-fail-load: ${errorCode} - ${errorDescription}`)
+  })
+  mainWindow.webContents.on('render-process-gone', (e, details) => {
+    logDebug(`render-process-gone: ${JSON.stringify(details)}`)
+  })
+  mainWindow.on('close', () => {
+    logDebug('mainWindow close event fired')
+  })
+
   mainWindow.once('ready-to-show', () => {
+    logDebug('mainWindow ready-to-show fired')
     mainWindow.show()
     mainWindow.maximize()
   })
@@ -211,6 +254,7 @@ function createWindow() {
 
 // ─── APP READY ───────────────────────────────────────────────────────────────
 app.whenReady().then(() => {
+  logDebug('app.whenReady fired')
   // Log application version
   console.log('========================================')
   console.log(`[MediSoft] Starting MediSoft Pro v${app.getVersion()}`)
@@ -230,24 +274,46 @@ app.whenReady().then(() => {
     require('./ipc/expenses')(ipcMain)
     require('./ipc/settings')(ipcMain)
     require('./ipc/fix-pcs')(ipcMain)
+    require('./ipc/license')(ipcMain, app)
     setupUpdaterIPC()
+    logDebug('All IPC handlers registered successfully')
     console.log('[MediSoft] All IPC handlers registered.')
   } catch (err) {
+    logDebug('IPC registration error: ' + (err.stack || err))
     console.error('[MediSoft] IPC registration error:', err)
   }
 
-  createWindow()
+  try {
+    createWindow()
+    logDebug('createWindow called successfully')
+  } catch (err) {
+    logDebug('createWindow error: ' + (err.stack || err))
+  }
   // setupAutoUpdater() // Disabled: No update server running
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
+}).catch(err => {
+  logDebug('app.whenReady error: ' + (err.stack || err))
+})
+
+app.on('before-quit', (e) => {
+  logDebug('app before-quit fired')
+})
+app.on('will-quit', (e) => {
+  logDebug('app will-quit fired')
+})
+app.on('quit', (e, exitCode) => {
+  logDebug('app quit fired with exit code ' + exitCode)
 })
 
 app.on('window-all-closed', () => {
+  logDebug('window-all-closed fired')
   if (process.platform !== 'darwin') app.quit()
 })
 
 process.on('uncaughtException', (err) => {
+  logDebug('uncaughtException: ' + (err.stack || err))
   console.error('[MediSoft] Uncaught exception:', err)
 })

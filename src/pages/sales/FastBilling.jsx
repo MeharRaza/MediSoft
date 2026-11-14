@@ -864,7 +864,11 @@ export default function FastBilling() {
       
       // ENABLED for Ctrl+P: Show invoice for print
       try {
-        const invoiceDetails = await api.sales.getInvoiceById(result.id)
+        const [invoiceDetails, freshSettings] = await Promise.all([
+          api.sales.getInvoiceById(result.id),
+          invoiceSettings ? Promise.resolve(invoiceSettings) : api.settings.getInvoiceSettings()
+        ])
+        if (freshSettings) setInvoiceSettings(freshSettings)
         setAutoPrint(true) // Enable auto-print for Ctrl+P
         setPrintInvoice(invoiceDetails)
       } catch (e) {

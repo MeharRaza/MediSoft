@@ -610,27 +610,12 @@ export default function FastBilling() {
     }
   }
 
-  const addItem = (product) => {    console.log('➕ Adding product to cart:', {
-      id: product.id,
-      name: product.name,
-      current_purchase_item_id: product.current_purchase_item_id,
-      current_stock: product.current_stock,
-      stock: product.stock,
-      rack_location: product.rack_location,
-      manufacturer_name: product.company_name,
-      current_sale_price: product.current_sale_price,
-      sale_price: product.sale_price,
-      pcs_in_pack: product.pcs_in_pack,
-      profit_percent: product.profit_percent
-    })
+  const addItem = (product) => {
+    const availableStock = parseFloat(product.stock) || 0
     
-    // ALLOW adding zero-stock items to cart (for checking history)
-    // But track them for validation before saving
-    const hasZeroStock = !product.stock || product.stock <= 0
-    
-    // VALIDATION: Check if product has purchase_item_id
-    if (!product.current_purchase_item_id && !hasZeroStock) {
-      alert(`Cannot add "${product.name}" - No purchase record found. Please check inventory.`)
+    // STRICT CHECK: Item must have purchase record AND stock > 0
+    if (!product.current_purchase_item_id || availableStock <= 0) {
+      alert(`❌ Cannot add "${product.name}"!\n\nThis item is OUT OF STOCK (Available: ${availableStock}) or has no purchase entry in system.\n\nPlease complete purchase entry first.`)
       setSearchQ('')
       setSearchResults([])
       setSelectedIndex(-1)
@@ -643,7 +628,11 @@ export default function FastBilling() {
     setSelectedIndex(-1)
     const existing = items.findIndex(i => i.product_id === product.id && i.purchase_item_id === product.current_purchase_item_id)
     if (existing >= 0) {
-      // Product already exists - increment quantity
+      // Check stock before incrementing
+      if (items[existing].qty + 1 > availableStock) {
+        alert(`❌ Cannot add more "${product.name}"!\n\nOnly ${availableStock} in stock.`)
+        return
+      }
       const updated = [...items]
       updated[existing].qty += 1
       updated[existing].total = calcTotal(updated[existing])
@@ -665,16 +654,16 @@ export default function FastBilling() {
         category: product.category_name,
         rack_location: product.rack_location || 'N/A',
         manufacturer_name: product.company_name || 'N/A',
-        purchase_item_id: product.current_purchase_item_id || null,
+        purchase_item_id: product.current_purchase_item_id,
         expiry_date: product.current_expiry || '',
-        qty: hasZeroStock ? 0 : 1, // Set qty to 0 if zero stock
+        qty: 1,
         sale_price: salePerPill, // Per pill for calculation
         purchase_price: purchasePerPill, // For profit calculation
         profit_percent: product.profit_percent || 0,
         discount_percent: 0,
         total: salePerPill,
         current_stock: product.current_stock || 0,
-        total_stock: product.stock || 0,
+        total_stock: availableStock,
         pcs_in_pack: product.pcs_in_pack || 1,
       }
       console.log('✅ Item added to cart:', item)
@@ -696,6 +685,14 @@ export default function FastBilling() {
 
   const updateItem = (idx, field, value) => {
     const updated = [...items]
+    if (field === 'qty') {
+      const enteredQty = parseFloat(value) || 0
+      const maxStock = parseFloat(updated[idx].total_stock || updated[idx].current_stock) || 0
+      if (maxStock > 0 && enteredQty > maxStock) {
+        alert(`❌ Cannot enter ${enteredQty} qty for "${updated[idx].name}".\n\nOnly ${maxStock} available in stock!`)
+        value = maxStock
+      }
+    }
     updated[idx][field] = value
     updated[idx].total = calcTotal(updated[idx])
     setItems(updated)
@@ -741,11 +738,11 @@ export default function FastBilling() {
   const handleFinishSale = useCallback(async () => {
     if (items.length === 0) return
     
-    // Check for zero-stock items
-    const zeroStockItems = items.filter(item => item.stock <= 0 || item.qty === 0)
-    if (zeroStockItems.length > 0) {
-      const names = zeroStockItems.map(i => i.name).join(', ')
-      alert(`❌ Cannot save bill!\n\nOut of stock items:\n${names}\n\nPlease remove these items or adjust stock before saving.`)
+    // Check for zero-stock or unpurchased items
+    const invalidItems = items.filter(item => !item.purchase_item_id || parseFloat(item.qty) <= 0 || (item.total_stock && parseFloat(item.qty) > parseFloat(item.total_stock)))
+    if (invalidItems.length > 0) {
+      const names = invalidItems.map(i => `${i.name} (Qty: ${i.qty}, Stock: ${i.total_stock || 0})`).join('\n')
+      alert(`❌ Cannot save bill!\n\nThe following items have 0 stock or invalid quantity:\n\n${names}\n\nPlease remove these items or complete purchase entry before saving.`)
       return
     }
     
@@ -812,11 +809,11 @@ export default function FastBilling() {
   const handleFinishSaleWithPrint = useCallback(async () => {
     if (items.length === 0) return
     
-    // Check for zero-stock items
-    const zeroStockItems = items.filter(item => item.stock <= 0 || item.qty === 0)
-    if (zeroStockItems.length > 0) {
-      const names = zeroStockItems.map(i => i.name).join(', ')
-      alert(`❌ Cannot save bill!\n\nOut of stock items:\n${names}\n\nPlease remove these items or adjust stock before saving.`)
+    // Check for zero-stock or unpurchased items
+    const invalidItems = items.filter(item => !item.purchase_item_id || parseFloat(item.qty) <= 0 || (item.total_stock && parseFloat(item.qty) > parseFloat(item.total_stock)))
+    if (invalidItems.length > 0) {
+      const names = invalidItems.map(i => `${i.name} (Qty: ${i.qty}, Stock: ${i.total_stock || 0})`).join('\n')
+      alert(`❌ Cannot save bill!\n\nThe following items have 0 stock or invalid quantity:\n\n${names}\n\nPlease remove these items or complete purchase entry before saving.`)
       return
     }
     

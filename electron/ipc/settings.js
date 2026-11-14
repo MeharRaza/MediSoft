@@ -36,6 +36,53 @@ module.exports = (ipcMain) => {
     return { id: r.lastInsertRowid, success: true }
   })
 
+  ipcMain.handle('settings:changeCredentials', (_, data) => {
+    try {
+      const { userId, currentPassword, newUsername, newPassword, newFullName } = data || {}
+      const targetId = userId || currentUser?.id
+      if (!targetId) {
+        return { success: false, message: 'User not identified.' }
+      }
+
+      const user = db.prepare('SELECT * FROM users WHERE id=?').get(targetId)
+      if (!user) {
+        return { success: false, message: 'User not found.' }
+      }
+
+      if (currentPassword && user.password !== currentPassword) {
+        return { success: false, message: 'Current password does not match.' }
+      }
+
+      if (newUsername && newUsername.trim() !== user.username) {
+        const existing = db.prepare('SELECT id FROM users WHERE username=? AND id!=?').get(newUsername.trim(), targetId)
+        if (existing) {
+          return { success: false, message: 'Username is already in use. Please choose another.' }
+        }
+      }
+
+      const updatedUsername = newUsername && newUsername.trim() ? newUsername.trim() : user.username
+      const updatedPassword = newPassword && newPassword.trim() ? newPassword.trim() : user.password
+      const updatedFullName = newFullName && newFullName.trim() ? newFullName.trim() : user.full_name
+
+      db.prepare('UPDATE users SET username=?, password=?, full_name=? WHERE id=?')
+        .run(updatedUsername, updatedPassword, updatedFullName, targetId)
+
+      if (currentUser && currentUser.id === targetId) {
+        currentUser.username = updatedUsername
+        currentUser.full_name = updatedFullName
+        currentUser.password = updatedPassword
+      }
+
+      return {
+        success: true,
+        message: 'Credentials updated successfully!',
+        user: { id: targetId, username: updatedUsername, full_name: updatedFullName, role: user.role }
+      }
+    } catch (e) {
+      return { success: false, message: e.message }
+    }
+  })
+
   ipcMain.handle('settings:updateUser', (_, data) => {
     if (data.password) {
       db.prepare(`UPDATE users SET username=?,password=?,full_name=?,role=?,branch_id=?,rights=?,is_active=? WHERE id=?`)

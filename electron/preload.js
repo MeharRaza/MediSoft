@@ -122,10 +122,11 @@ contextBridge.exposeInMainWorld('api', {
   },
   // Settings
   settings: {
-    getUsers:        () => ipcRenderer.invoke('settings:getUsers'),
-    createUser:      (data) => ipcRenderer.invoke('settings:createUser', data),
-    updateUser:      (data) => ipcRenderer.invoke('settings:updateUser', data),
-    deleteUser:      (id) => ipcRenderer.invoke('settings:deleteUser', id),
+    getUsers:          () => ipcRenderer.invoke('settings:getUsers'),
+    createUser:        (data) => ipcRenderer.invoke('settings:createUser', data),
+    updateUser:        (data) => ipcRenderer.invoke('settings:updateUser', data),
+    changeCredentials: (data) => ipcRenderer.invoke('settings:changeCredentials', data),
+    deleteUser:        (id) => ipcRenderer.invoke('settings:deleteUser', id),
     getBranches:     () => ipcRenderer.invoke('settings:getBranches'),
     createBranch:    (data) => ipcRenderer.invoke('settings:createBranch', data),
     updateBranch:    (data) => ipcRenderer.invoke('settings:updateBranch', data),

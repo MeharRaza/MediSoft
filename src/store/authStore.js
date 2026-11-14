@@ -38,4 +38,8 @@ export const useAuthStore = create((set, get) => ({
     if (isElectron) await window.api.settings.logout()
     set({ user: null })
   },
+
+  updateUser: (fields) => {
+    set(s => ({ user: s.user ? { ...s.user, ...fields } : null }))
+  },
 }))

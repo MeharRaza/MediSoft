@@ -138,7 +138,10 @@ export default function CompanySettings() {
     setSubmitting(true); setMsg(null)
     try {
       await api.settings.saveCompanyInfo({ ...form, tax_rate: parseFloat(form.tax_rate)||0 })
-      setMsg({ type: 'success', text: 'Company information saved.' })
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('company-updated'))
+      }
+      setMsg({ type: 'success', text: 'Company information saved successfully!' })
     } catch (err) { setMsg({ type: 'error', text: err.message }) }
     finally { setSubmitting(false) }
   }

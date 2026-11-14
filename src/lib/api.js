@@ -120,9 +120,10 @@ export const api = {
   },
   settings: {
     getUsers:        () => isElectron ? window.api.settings.getUsers() : Promise.resolve([]),
-    createUser:      (data) => isElectron ? window.api.settings.createUser(data) : Promise.resolve({ success: true }),
-    updateUser:      (data) => isElectron ? window.api.settings.updateUser(data) : Promise.resolve({ success: true }),
-    deleteUser:      (id) => isElectron ? window.api.settings.deleteUser(id) : Promise.resolve({ success: true }),
+    createUser:        (data) => isElectron ? window.api.settings.createUser(data) : Promise.resolve({ success: true }),
+    updateUser:        (data) => isElectron ? window.api.settings.updateUser(data) : Promise.resolve({ success: true }),
+    changeCredentials: (data) => isElectron ? window.api.settings.changeCredentials(data) : Promise.resolve({ success: true, message: 'Updated (Dev)' }),
+    deleteUser:        (id) => isElectron ? window.api.settings.deleteUser(id) : Promise.resolve({ success: true }),
     getBranches:     () => isElectron ? window.api.settings.getBranches() : Promise.resolve(mockData.branches),
     createBranch:    (data) => isElectron ? window.api.settings.createBranch(data) : Promise.resolve({ success: true }),
     updateBranch:    (data) => isElectron ? window.api.settings.updateBranch(data) : Promise.resolve({ success: true }),

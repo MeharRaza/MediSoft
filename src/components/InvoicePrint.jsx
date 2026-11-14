@@ -1,11 +1,25 @@
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { fmt } from './ui'
+import { api } from '../lib/api'
 
 // Thermal Receipt Print Component (80mm) - Proper Table Format
 export default function InvoicePrint({ invoice, onClose, autoPrint = false }) {
   const printButtonRef = useRef(null)
   const closeButtonRef = useRef(null)
   const hasAutoPrinted = useRef(false) // Track if auto-print already happened
+  const [company, setCompany] = useState({ name: '', address: '', phone: '' })
+
+  useEffect(() => {
+    api.settings.getCompanyInfo().then(c => {
+      if (c) {
+        setCompany({
+          name: c.name || '',
+          address: c.address || '',
+          phone: c.phone || ''
+        })
+      }
+    }).catch(() => {})
+  }, [])
 
   // Auto-print on mount if autoPrint is true (for Ctrl+P)
   useEffect(() => {
@@ -186,14 +200,18 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false }) {
       <div id="thermal-receipt">
         {/* Header - Centered */}
         <div className="center bold" style={{ fontSize: '16px' }}>
-          Harmain Medical Store
+          {company.name || 'MediSoft Pharmacy'}
         </div>
-        <div className="center" style={{ fontSize: '13px', marginTop: '2px' }}>
-          Opposite Nadra Kiosik Main Bazar Raiwind
-        </div>
-        <div className="center" style={{ fontSize: '13px', marginTop: '2px' }}>
-          Phone #: 03228684603
-        </div>
+        {company.address ? (
+          <div className="center" style={{ fontSize: '12px', marginTop: '2px' }}>
+            {company.address}
+          </div>
+        ) : null}
+        {company.phone ? (
+          <div className="center" style={{ fontSize: '12px', marginTop: '2px' }}>
+            Phone #: {company.phone}
+          </div>
+        ) : null}
         
         <div className="line"></div>
         

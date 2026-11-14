@@ -1,6 +1,8 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import { useAuthStore } from '../store/authStore'
+import { api } from '../lib/api'
+import { Modal, Btn, Input } from './ui'
 import KeyboardShortcutsHelp from './KeyboardShortcutsHelp'
 
 const navItems = [
@@ -79,12 +81,86 @@ export default function Layout() {
   const logout = useAuthStore(s => s.logout)
   const navigate = useNavigate()
   const [clock, setClock] = useState(new Date().toLocaleTimeString())
+  const [storeName, setStoreName] = useState('MediSoft Pharmacy')
+  const [appVersion, setAppVersion] = useState('v1.5.0')
+
+  // Account / Change Credentials Modal State
+  const [accountModalOpen, setAccountModalOpen] = useState(false)
+  const [credForm, setCredForm] = useState({ username: '', fullName: '', currentPassword: '', newPassword: '', confirmPassword: '' })
+  const [credMsg, setCredMsg] = useState(null)
+  const [credLoading, setCredLoading] = useState(false)
+
+  // Load Store Name and App Version
+  useEffect(() => {
+    const loadCompany = () => {
+      api.settings.getCompanyInfo().then(c => {
+        if (c?.name && c.name.trim()) setStoreName(c.name.trim())
+      }).catch(() => {})
+    }
+    loadCompany()
+    window.addEventListener('company-updated', loadCompany)
+
+    if (window.api?.updater?.getVersion) {
+      window.api.updater.getVersion().then(v => {
+        if (v?.current) setAppVersion('v' + v.current.replace(/^v/, ''))
+      }).catch(() => {})
+    }
+
+    return () => window.removeEventListener('company-updated', loadCompany)
+  }, [])
+
+  const openAccountModal = () => {
+    setCredForm({
+      username: user?.username || '',
+      fullName: user?.full_name || '',
+      currentPassword: '',
+      newPassword: '',
+      confirmPassword: ''
+    })
+    setCredMsg(null)
+    setAccountModalOpen(true)
+  }
+
+  const handleUpdateCredentials = async (e) => {
+    e.preventDefault()
+    setCredMsg(null)
+    if (credForm.newPassword && credForm.newPassword !== credForm.confirmPassword) {
+      return setCredMsg({ type: 'error', text: 'New passwords do not match!' })
+    }
+    setCredLoading(true)
+    try {
+      const res = await api.settings.changeCredentials({
+        userId: user?.id,
+        currentPassword: credForm.currentPassword,
+        newUsername: credForm.username,
+        newPassword: credForm.newPassword,
+        newFullName: credForm.fullName
+      })
+      if (res.success) {
+        setCredMsg({ type: 'success', text: 'Credentials updated successfully!' })
+        useAuthStore.getState().updateUser({
+          username: credForm.username,
+          full_name: credForm.fullName
+        })
+        setTimeout(() => {
+          setAccountModalOpen(false)
+          setCredMsg(null)
+        }, 1200)
+      } else {
+        setCredMsg({ type: 'error', text: res.message || 'Failed to update credentials.' })
+      }
+    } catch (err) {
+      setCredMsg({ type: 'error', text: err.message })
+    } finally {
+      setCredLoading(false)
+    }
+  }
 
   // Update clock
-  useState(() => {
+  useEffect(() => {
     const timer = setInterval(() => setClock(new Date().toLocaleTimeString()), 1000)
     return () => clearInterval(timer)
-  })
+  }, [])
 
   // Build flat menu list for keyboard navigation
   const flatMenuItems = [
@@ -340,8 +416,8 @@ export default function Layout() {
         
         {/* Logo */}
         <div className="px-5 py-5 border-b border-[#c3c6d5]">
-          <h1 className="text-[18px] font-bold text-[#003c90]" style={{ fontFamily: 'Hanken Grotesk' }}>
-            Harmain Medical Store
+          <h1 className="text-[18px] font-bold text-[#003c90] truncate" title={storeName} style={{ fontFamily: 'Hanken Grotesk' }}>
+            {storeName}
           </h1>
           <p className="text-[10px] text-[#737784] tracking-widest font-semibold">PHARMACY MANAGEMENT</p>
         </div>
@@ -414,17 +490,25 @@ export default function Layout() {
           })}
         </nav>
 
-        {/* User info + logout */}
+        {/* User info + credentials + logout */}
         <div className="border-t border-[#c3c6d5] px-4 py-3">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-[12px] font-bold text-[#191c1e]">{user?.full_name}</p>
-              <p className="text-[10px] text-[#737784] capitalize">{user?.role}</p>
+            <div className="flex-1 min-w-0 pr-2">
+              <p className="text-[12px] font-bold text-[#191c1e] truncate">{user?.full_name}</p>
+              <p className="text-[10px] text-[#737784] capitalize truncate">@{user?.username} ({user?.role})</p>
             </div>
-            <button onClick={logout} title="Sign Out"
-              className="p-1.5 text-[#ba1a1a] hover:bg-red-50 rounded transition-colors">
-              <span className="material-symbols-outlined text-[18px]">logout</span>
-            </button>
+            <div className="flex items-center gap-1 shrink-0">
+              <button 
+                onClick={openAccountModal} 
+                title="Change Username & Password"
+                className="p-1.5 text-[#003c90] hover:bg-blue-50 rounded transition-colors">
+                <span className="material-symbols-outlined text-[18px]">key</span>
+              </button>
+              <button onClick={logout} title="Sign Out"
+                className="p-1.5 text-[#ba1a1a] hover:bg-red-50 rounded transition-colors">
+                <span className="material-symbols-outlined text-[18px]">logout</span>
+              </button>
+            </div>
           </div>
         </div>
       </aside>
@@ -442,7 +526,7 @@ export default function Layout() {
           <div className="flex items-center gap-4 text-[11px] text-[#434653]">
             <span className="font-mono">{clock}</span>
             <span className="text-[#c3c6d5]">|</span>
-            <span className="font-semibold text-[#003c90]">v1.3.8</span>
+            <span className="font-semibold text-[#003c90]">{appVersion}</span>
           </div>
         </header>
 
@@ -451,6 +535,78 @@ export default function Layout() {
           <Outlet />
         </main>
       </div>
+
+      {/* Change Username & Password Modal */}
+      <Modal 
+        open={accountModalOpen} 
+        onClose={() => setAccountModalOpen(false)} 
+        title="🔐 Account Security & Credentials"
+      >
+        <form onSubmit={handleUpdateCredentials} className="space-y-4">
+          {credMsg && (
+            <div className={`p-3 rounded text-[12px] font-semibold flex items-center gap-2 ${
+              credMsg.type === 'error' ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200'
+            }`}>
+              <span className="material-symbols-outlined text-[16px]">
+                {credMsg.type === 'error' ? 'error' : 'check_circle'}
+              </span>
+              <span>{credMsg.text}</span>
+            </div>
+          )}
+
+          <div className="space-y-3">
+            <Input 
+              label="Full Display Name *" 
+              value={credForm.fullName} 
+              onChange={e => setCredForm(f => ({ ...f, fullName: e.target.value }))} 
+              required 
+            />
+            
+            <Input 
+              label="Login Username *" 
+              value={credForm.username} 
+              onChange={e => setCredForm(f => ({ ...f, username: e.target.value }))} 
+              required 
+            />
+
+            <Input 
+              label="Current Password" 
+              type="password" 
+              placeholder="Enter current password (if required)" 
+              value={credForm.currentPassword} 
+              onChange={e => setCredForm(f => ({ ...f, currentPassword: e.target.value }))} 
+            />
+
+            <div className="grid grid-cols-2 gap-3">
+              <Input 
+                label="New Password" 
+                type="password" 
+                placeholder="Leave blank to keep existing" 
+                value={credForm.newPassword} 
+                onChange={e => setCredForm(f => ({ ...f, newPassword: e.target.value }))} 
+              />
+              <Input 
+                label="Confirm New Password" 
+                type="password" 
+                placeholder="Re-type new password" 
+                value={credForm.confirmPassword} 
+                onChange={e => setCredForm(f => ({ ...f, confirmPassword: e.target.value }))} 
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-3 border-t border-[#c3c6d5]">
+            <Btn type="button" variant="outline" onClick={() => setAccountModalOpen(false)}>
+              Cancel
+            </Btn>
+            <Btn type="submit" variant="primary" disabled={credLoading}>
+              {credLoading && <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+              <span className="material-symbols-outlined text-[16px]">save</span>
+              Save Credentials
+            </Btn>
+          </div>
+        </form>
+      </Modal>
     </div>
   )
 }

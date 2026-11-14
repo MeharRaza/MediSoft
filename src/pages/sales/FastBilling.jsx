@@ -1028,7 +1028,7 @@ export default function FastBilling() {
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
         <div className="px-5 py-3 bg-white border-b border-[#c3c6d5] flex items-center gap-4">
-          <h2 className="text-[17px] font-bold text-[#16a34a]" style={{ fontFamily: 'Hanken Grotesk' }}>
+          <h2 className="text-[17px] font-bold text-[#003c90]" style={{ fontFamily: 'Hanken Grotesk' }}>
             Fast Billing
           </h2>
           
@@ -1054,14 +1054,14 @@ export default function FastBilling() {
               </div>
               <button
                 onClick={() => navigateBill('prev')}
-                className="px-2.5 py-1 bg-white hover:bg-[#f2f4f6] rounded border border-[#c3c6d5] text-[#434653] hover:text-[#16a34a] text-[11px] font-semibold transition-colors"
+                className="px-2.5 py-1 bg-white hover:bg-[#f2f4f6] rounded border border-[#c3c6d5] text-[#434653] hover:text-[#003c90] text-[11px] font-semibold transition-colors"
                 title="Previous Bill (Ctrl+←)"
               >
                 Previous
               </button>
               <button
                 onClick={() => navigateBill('next')}
-                className="px-2.5 py-1 bg-white hover:bg-[#f2f4f6] rounded border border-[#c3c6d5] text-[#434653] hover:text-[#16a34a] text-[11px] font-semibold transition-colors"
+                className="px-2.5 py-1 bg-white hover:bg-[#f2f4f6] rounded border border-[#c3c6d5] text-[#434653] hover:text-[#003c90] text-[11px] font-semibold transition-colors"
                 title="Next Bill (Ctrl+→)"
               >
                 Next
@@ -1187,7 +1187,7 @@ export default function FastBilling() {
                           selectedCustomerDropdownIndex === idx ? 'bg-[#e3f2fd]' : ''
                         }`}
                       >
-                        <span className="material-symbols-outlined text-[14px] text-[#16a34a]">person</span>
+                        <span className="material-symbols-outlined text-[14px] text-[#003c90]">person</span>
                         <span className="flex-1">{c.name}</span>
                         {c.balance > 0 && <span className="text-red-500 text-[10px] font-semibold">Bal: {fmt(c.balance)}</span>}
                       </button>
@@ -1208,12 +1208,12 @@ export default function FastBilling() {
                     setCustomerSearch('');
                     setSelectedCustomerDropdownIndex(0);
                   }}
-                  className={`w-full text-left px-3 py-2.5 text-[12px] bg-[#f7f9fb] hover:bg-[#eceef0] transition-colors flex items-center gap-2 border-t-2 border-[#16a34a] ${
+                  className={`w-full text-left px-3 py-2.5 text-[12px] bg-[#f7f9fb] hover:bg-[#eceef0] transition-colors flex items-center gap-2 border-t-2 border-[#003c90] ${
                     selectedCustomerDropdownIndex === customers.filter(c => c.name.toLowerCase().includes(customerSearch.toLowerCase())).length ? 'bg-[#e3f2fd]' : ''
                   }`}
                 >
-                  <span className="material-symbols-outlined text-[14px] text-green-600">add_circle</span>
-                  <span className="text-[#16a34a] font-semibold">Use "{customerSearch}" as Walk-in</span>
+                  <span className="material-symbols-outlined text-[14px] text-[#003c90]">add_circle</span>
+                  <span className="text-[#003c90] font-semibold">Use "{customerSearch}" as Walk-in</span>
                 </button>
               </div>
             )}
@@ -1258,7 +1258,7 @@ export default function FastBilling() {
               onChange={e => setSearchQ(e.target.value)}
               onKeyDown={handleSearchKeyDown}
               placeholder="Search product or scan barcode"
-              className="w-full pl-10 pr-4 py-2 border-2 border-[#16a34a]/30 rounded-lg text-[13px] bg-white focus:border-[#16a34a] transition-colors"
+              className="w-full pl-10 pr-4 py-2 border-2 border-[#003c90]/30 rounded-lg text-[13px] bg-white focus:border-[#003c90] transition-colors"
             />
           </div>
           {searchResults.length > 0 && (
@@ -1284,7 +1284,7 @@ export default function FastBilling() {
                   onClick={() => addItem(p)}
                   className={`w-full flex items-center justify-between px-4 py-2.5 text-left transition-colors border-b border-[#eceef0] last:border-0 ${
                     idx === selectedIndex 
-                      ? 'bg-[#16a34a] text-white' 
+                      ? 'bg-[#003c90] text-white' 
                       : 'hover:bg-[#f2f4f6]'
                   }`}
                 >
@@ -1295,7 +1295,7 @@ export default function FastBilling() {
                     <p className={`text-[11px] ${idx === selectedIndex ? 'text-white/80' : 'text-[#737784]'}`}>
                       {p.company_name || 'N/A'}
                       {pcsInPack > 1 && (
-                        <span className={`ml-2 text-[10px] font-semibold ${idx === selectedIndex ? 'text-white/90' : 'text-[#16a34a]'} px-2 py-0.5 rounded ${idx === selectedIndex ? 'bg-white/20' : 'bg-green-100'}`}>
+                        <span className={`ml-2 text-[10px] font-semibold ${idx === selectedIndex ? 'text-white/90' : 'text-[#003c90]'} px-2 py-0.5 rounded ${idx === selectedIndex ? 'bg-white/20' : 'bg-blue-100'}`}>
                           {pcsInPack} pills/box
                         </span>
                       )}
@@ -1312,14 +1312,14 @@ export default function FastBilling() {
                     )}
                   </div>
                   <div className="text-right ml-4">
-                    <p className={`text-[13px] font-bold ${idx === selectedIndex ? 'text-white' : 'text-[#16a34a]'}`}>
+                    <p className={`text-[13px] font-bold ${idx === selectedIndex ? 'text-white' : 'text-[#003c90]'}`}>
                       PKR {fmt(p.current_sale_price || p.sale_price)}/box
                     </p>
                     {/* Total Stock (All Batches) - Highlighted */}
                     <p className={`text-[11px] font-bold mt-1 ${
                       idx === selectedIndex 
                         ? 'text-white'
-                        : totalStock <= 0 ? 'text-red-600' : totalStock < 20 ? 'text-amber-600' : 'text-green-600'
+                        : totalStock <= 0 ? 'text-red-600' : totalStock < 20 ? 'text-amber-600' : 'text-blue-600'
                     }`}>
                       Total: {totalStock} pills
                     </p>
@@ -1391,7 +1391,7 @@ export default function FastBilling() {
                         onChange={e => updateItem(idx, 'qty', parseFloat(e.target.value) || 1)}
                         onKeyDown={e => handleCartKeyDown(e, idx, 'qty')}
                         onFocus={e => e.target.select()}
-                        className="w-16 px-2 py-1 text-right border border-[#c3c6d5] rounded text-[12px] focus:border-[#16a34a] focus:ring-2 focus:ring-[#16a34a]/20 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        className="w-16 px-2 py-1 text-right border border-[#c3c6d5] rounded text-[12px] focus:border-[#003c90] focus:ring-2 focus:ring-[#003c90]/20 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       />
                     </td>
                     <td className="px-3 py-2 text-right">
@@ -1404,7 +1404,7 @@ export default function FastBilling() {
                           onChange={e => updateItem(idx, 'sale_price', parseFloat(e.target.value) || 0)}
                           onKeyDown={e => handleCartKeyDown(e, idx, 'sale_price')}
                           onFocus={e => e.target.select()}
-                          className="w-24 px-2 py-1 text-right border border-[#c3c6d5] rounded text-[12px] font-mono focus:border-[#16a34a] focus:ring-2 focus:ring-[#16a34a]/20 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          className="w-24 px-2 py-1 text-right border border-[#c3c6d5] rounded text-[12px] font-mono focus:border-[#003c90] focus:ring-2 focus:ring-[#003c90]/20 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         />
                         {item.profit_percent !== undefined && (
                           <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
@@ -1425,10 +1425,10 @@ export default function FastBilling() {
                         onChange={e => updateItem(idx, 'discount_percent', parseFloat(e.target.value) || 0)}
                         onKeyDown={e => handleCartKeyDown(e, idx, 'discount_percent')}
                         onFocus={e => e.target.select()}
-                        className="w-14 px-2 py-1 text-right border border-[#c3c6d5] rounded text-[12px] focus:border-[#16a34a] focus:ring-2 focus:ring-[#16a34a]/20 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        className="w-14 px-2 py-1 text-right border border-[#c3c6d5] rounded text-[12px] focus:border-[#003c90] focus:ring-2 focus:ring-[#003c90]/20 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       />
                     </td>
-                    <td className="px-3 py-2 text-right text-[12px] font-bold font-mono text-[#16a34a]">
+                    <td className="px-3 py-2 text-right text-[12px] font-bold font-mono text-[#003c90]">
                       {fmt(item.total)}
                     </td>
                     <td className="px-3 py-2 text-center">
@@ -1525,7 +1525,7 @@ export default function FastBilling() {
                   max="100"
                   onChange={e => setPercentDiscount(parseFloat(e.target.value) || 0)}
                   placeholder="0"
-                  className="flex-1 px-2 py-1.5 border border-[#c3c6d5] rounded text-[14px] font-mono text-right focus:border-[#16a34a] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  className="flex-1 px-2 py-1.5 border border-[#c3c6d5] rounded text-[14px] font-mono text-right focus:border-[#003c90] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
                 <span className="text-[11px] text-gray-600 w-12">% Off</span>
                 <span className="font-mono text-red-500 font-semibold w-24 text-right">- PKR {fmt(percentDiscAmt)}</span>
@@ -1544,7 +1544,7 @@ export default function FastBilling() {
                   max={afterPercent}
                   onChange={e => setFlatDiscount(parseFloat(e.target.value) || 0)}
                   placeholder="0"
-                  className="flex-1 px-2 py-1.5 border border-[#c3c6d5] rounded text-[14px] font-mono text-right focus:border-[#16a34a] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  className="flex-1 px-2 py-1.5 border border-[#c3c6d5] rounded text-[14px] font-mono text-right focus:border-[#003c90] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
                 <span className="text-[11px] text-gray-600 w-12">PKR</span>
                 <span className="font-mono text-red-500 font-semibold w-24 text-right">- PKR {fmt(flatDiscount)}</span>
@@ -1599,9 +1599,9 @@ export default function FastBilling() {
               </div>
             )}
             
-            <div className="flex justify-between items-center p-3 bg-[#16a34a]/5 rounded-lg border border-[#16a34a]/20">
-              <span className="text-[#16a34a] font-bold text-[14px]">Grand Total</span>
-              <span className="font-mono font-bold text-[#16a34a] text-[20px]">PKR {fmt(grandTotal)}</span>
+            <div className="flex justify-between items-center p-3 bg-[#003c90]/5 rounded-lg border border-[#003c90]/20">
+              <span className="text-[#003c90] font-bold text-[14px]">Grand Total</span>
+              <span className="font-mono font-bold text-[#003c90] text-[20px]">PKR {fmt(grandTotal)}</span>
             </div>
           </div>
 
@@ -1611,7 +1611,7 @@ export default function FastBilling() {
             <div className="grid grid-cols-2 gap-2">
               {[['cash','payments','Cash'],['credit','credit_card','Credit']].map(([val, icon, label]) => (
                 <button key={val} onClick={() => setPaymentMethod(val)}
-                  className={`flex items-center justify-center gap-1.5 py-2 rounded border-2 text-[12px] font-semibold transition-all ${paymentMethod === val ? 'border-[#16a34a] bg-[#16a34a]/5 text-[#16a34a]' : 'border-[#c3c6d5] text-[#434653] hover:border-[#16a34a]/50'}`}
+                  className={`flex items-center justify-center gap-1.5 py-2 rounded border-2 text-[12px] font-semibold transition-all ${paymentMethod === val ? 'border-[#003c90] bg-[#003c90]/5 text-[#003c90]' : 'border-[#c3c6d5] text-[#434653] hover:border-[#003c90]/50'}`}
                   title={`Toggle to ${label} (Ctrl+P)`}
                 >
                   <span className="material-symbols-outlined text-[16px]">{icon}</span>{label}
@@ -1631,7 +1631,7 @@ export default function FastBilling() {
                 value={paidAmount}
                 onChange={e => setPaidAmount(e.target.value)}
                 placeholder={fmt(grandTotal)}
-                className="w-full pl-14 pr-3 py-3 border-2 border-[#c3c6d5] rounded-lg text-[20px] font-mono font-bold text-right focus:border-[#16a34a] transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                className="w-full pl-14 pr-3 py-3 border-2 border-[#c3c6d5] rounded-lg text-[20px] font-mono font-bold text-right focus:border-[#003c90] transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
             </div>
           </div>
@@ -1652,7 +1652,7 @@ export default function FastBilling() {
         {/* Action Buttons */}
         <div className="px-5 py-4 border-t border-[#c3c6d5] space-y-2">
           {success ? (
-            <div className="flex items-center justify-center gap-2 py-3 bg-green-500 text-white rounded-lg">
+            <div className="flex items-center justify-center gap-2 py-3 bg-[#003c90] text-white rounded-lg">
               <span className="material-symbols-outlined text-[20px]">check_circle</span>
               <span className="font-bold text-[14px]">{success} — Sale Complete!</span>
             </div>
@@ -1674,7 +1674,7 @@ export default function FastBilling() {
               <button
                 onClick={handleFinishSale}
                 disabled={items.length === 0 || loading}
-                className="w-full py-4 bg-[#16a34a] text-white font-bold text-[15px] rounded-lg flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-50 shadow-lg"
+                className="w-full py-4 bg-[#003c90] text-white font-bold text-[15px] rounded-lg flex items-center justify-center gap-2 hover:bg-[#002d6e] active:scale-[0.98] transition-all disabled:opacity-50 shadow-lg"
               >
                 {loading ? (
                   <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -1713,7 +1713,7 @@ export default function FastBilling() {
       >
         {historyLoading ? (
           <div className="flex items-center justify-center py-12">
-            <div className="w-8 h-8 border-4 border-[#16a34a]/20 border-t-[#16a34a] rounded-full animate-spin" />
+            <div className="w-8 h-8 border-4 border-[#003c90]/20 border-t-[#003c90] rounded-full animate-spin" />
             <span className="ml-3 text-[13px] text-[#737784]">Loading history...</span>
           </div>
         ) : historyPopup?.data ? (
@@ -1722,15 +1722,15 @@ export default function FastBilling() {
             <div className="grid grid-cols-3 gap-3">
               <div className="p-3 bg-[#f7f9fb] rounded-lg border border-[#c3c6d5] text-center">
                 <p className="text-[10px] text-[#737784] font-semibold uppercase">Total Sales</p>
-                <p className="text-[20px] font-bold text-[#16a34a]">{historyPopup.data.stats?.total_sales || 0}</p>
+                <p className="text-[20px] font-bold text-[#003c90]">{historyPopup.data.stats?.total_sales || 0}</p>
               </div>
               <div className="p-3 bg-[#f7f9fb] rounded-lg border border-[#c3c6d5] text-center">
                 <p className="text-[10px] text-[#737784] font-semibold uppercase">Total Qty Sold</p>
-                <p className="text-[20px] font-bold text-[#16a34a]">{historyPopup.data.stats?.total_quantity || 0}</p>
+                <p className="text-[20px] font-bold text-[#003c90]">{historyPopup.data.stats?.total_quantity || 0}</p>
               </div>
               <div className="p-3 bg-[#f7f9fb] rounded-lg border border-[#c3c6d5] text-center">
                 <p className="text-[10px] text-[#737784] font-semibold uppercase">Avg Price</p>
-                <p className="text-[20px] font-bold text-[#16a34a]">PKR {fmt(historyPopup.data.stats?.avg_price || 0)}</p>
+                <p className="text-[20px] font-bold text-[#003c90]">PKR {fmt(historyPopup.data.stats?.avg_price || 0)}</p>
               </div>
             </div>
 
@@ -1776,26 +1776,26 @@ export default function FastBilling() {
                         const netTotal = itemSubtotal - totalDiscAmt // Total - Discount
                         return (
                           <tr key={idx} className="hover:bg-[#f7f9fb] transition-colors">
-                            <td className="px-3 py-2 text-[12px] font-mono font-semibold text-[#16a34a]">{sale.invoice_no}</td>
+                            <td className="px-3 py-2 text-[12px] font-mono font-semibold text-[#003c90]">{sale.invoice_no}</td>
                             <td className="px-3 py-2 text-[11px] text-[#434653]">
                               <div>{dateStr}</div>
                               <div className="text-[10px] text-[#737784]">{timeStr}</div>
                             </td>
                             <td className="px-3 py-2 text-[11px] text-[#434653]">{sale.customer_name || 'Walk-in'}</td>
-                            <td className="px-3 py-2 text-[12px] font-mono font-bold text-right text-[#16a34a]">{sale.qty}</td>
+                            <td className="px-3 py-2 text-[12px] font-mono font-bold text-right text-[#003c90]">{sale.qty}</td>
                             <td className="px-3 py-2 text-[12px] font-mono text-right">{fmt(sale.sale_price)}</td>
                             <td className="px-3 py-2 text-[12px] font-mono text-right">{fmt(itemSubtotal)}</td>
                             <td className="px-3 py-2 text-right">
                               {totalDiscAmt > 0 ? (
                                 <span className="text-[11px] font-mono text-red-600">
-                                  -{fmt(totalDiscAmt)}
+                                   -{fmt(totalDiscAmt)}
                                   <span className="text-[10px] text-[#737784] ml-1">({discPct}%)</span>
                                 </span>
                               ) : (
                                 <span className="text-[11px] text-[#737784]">—</span>
                               )}
                             </td>
-                            <td className="px-3 py-2 text-[12px] font-mono font-bold text-right text-green-600">{fmt(netTotal)}</td>
+                            <td className="px-3 py-2 text-[12px] font-mono font-bold text-right text-[#003c90]">{fmt(netTotal)}</td>
                             <td className="px-3 py-2 text-center">
                               <button
                                 onClick={() => {

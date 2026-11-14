@@ -722,9 +722,11 @@ export default function FastBilling() {
   // Calculate total profit using effective cost and item-level revenue
   const totalProfit = items.reduce((sum, item) => {
     // Effective cost per unit (per pill/piece)
-    const unitCost = (item.purchase_price !== undefined && item.purchase_price !== null && item.purchase_price !== '')
-      ? parseFloat(item.purchase_price) || 0
-      : (item.profit_percent ? ((parseFloat(item.sale_price) || 0) * (1 - (parseFloat(item.profit_percent) || 0) / 100)) : 0)
+    const unitCost = (item.profit_percent && item.profit_percent !== 0)
+      ? ((parseFloat(item.sale_price) || 0) * (1 - (parseFloat(item.profit_percent) || 0) / 100))
+      : ((item.purchase_price !== undefined && item.purchase_price !== null && item.purchase_price !== '')
+          ? parseFloat(item.purchase_price) || 0
+          : 0)
     const costTotal = unitCost * (parseFloat(item.qty) || 0)
     
     // Selling revenue for this item after item-level discount

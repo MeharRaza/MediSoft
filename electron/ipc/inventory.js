@@ -123,31 +123,71 @@ module.exports = (ipcMain) => {
          AND (pi.expiry_date IS NULL OR pi.expiry_date >= date('now'))
          ORDER BY pi.expiry_date ASC NULLS LAST, pu.created_at ASC LIMIT 1) as current_expiry,
         
-        -- ALWAYS show LATEST prices (even if that batch is sold out)
-        (SELECT pi.sale_price FROM purchase_items pi 
-         JOIN purchases pu ON pu.id = pi.purchase_id
-         WHERE pi.product_id = p.id
-         ORDER BY pu.created_at DESC LIMIT 1) as current_sale_price,
+        -- FIFO Batch Sale Price (oldest expiring batch with available stock; fallback to latest purchase, then product table)
+        COALESCE(
+          (SELECT pi.sale_price FROM purchase_items pi 
+           JOIN purchases pu ON pu.id = pi.purchase_id
+           WHERE pi.product_id = p.id 
+           AND pi.qty > pi.qty_sold
+           AND (pi.expiry_date IS NULL OR pi.expiry_date >= date('now'))
+           ORDER BY pi.expiry_date ASC NULLS LAST, pu.created_at ASC LIMIT 1),
+          (SELECT pi.sale_price FROM purchase_items pi 
+           JOIN purchases pu ON pu.id = pi.purchase_id
+           WHERE pi.product_id = p.id
+           ORDER BY pu.created_at DESC LIMIT 1),
+          p.sale_price
+        ) as current_sale_price,
         
-        -- Effective purchase price (accounts for bonus boxes)
-        -- If bonus > 0: effective = (purchase_price * qty_in_boxes) / (qty_in_boxes + bonus)
-        (SELECT 
-          CASE 
-            WHEN (pi.qty_in_boxes + COALESCE(pi.bonus, 0)) > 0 AND pi.bonus > 0
-            THEN (pi.purchase_price * pi.qty_in_boxes) / (pi.qty_in_boxes + pi.bonus)
-            ELSE pi.purchase_price
-          END
-         FROM purchase_items pi 
-         JOIN purchases pu ON pu.id = pi.purchase_id
-         WHERE pi.product_id = p.id
-         ORDER BY pu.created_at DESC LIMIT 1) as current_purchase_price,
+        -- FIFO Batch Effective Purchase Price (accounting for profit_percent, bonus boxes, and discounts)
+        COALESCE(
+          (SELECT 
+            CASE 
+              WHEN pi.profit_percent IS NOT NULL AND pi.profit_percent != 0
+                THEN (pi.sale_price * (1 - pi.profit_percent / 100.0))
+              WHEN (pi.qty_in_boxes + COALESCE(pi.bonus, 0)) > 0 AND pi.bonus > 0
+                THEN (pi.purchase_price * pi.qty_in_boxes) / (pi.qty_in_boxes + pi.bonus)
+              WHEN pi.total > 0 AND pi.qty > 0 AND COALESCE(pi.pcs_in_pack, p.pcs_in_pack, 1) > 0
+                THEN (pi.total / pi.qty) * COALESCE(pi.pcs_in_pack, p.pcs_in_pack, 1)
+              ELSE pi.purchase_price
+            END
+           FROM purchase_items pi 
+           JOIN purchases pu ON pu.id = pi.purchase_id
+           WHERE pi.product_id = p.id 
+           AND pi.qty > pi.qty_sold
+           AND (pi.expiry_date IS NULL OR pi.expiry_date >= date('now'))
+           ORDER BY pi.expiry_date ASC NULLS LAST, pu.created_at ASC LIMIT 1),
+          (SELECT 
+            CASE 
+              WHEN pi.profit_percent IS NOT NULL AND pi.profit_percent != 0
+                THEN (pi.sale_price * (1 - pi.profit_percent / 100.0))
+              WHEN (pi.qty_in_boxes + COALESCE(pi.bonus, 0)) > 0 AND pi.bonus > 0
+                THEN (pi.purchase_price * pi.qty_in_boxes) / (pi.qty_in_boxes + pi.bonus)
+              WHEN pi.total > 0 AND pi.qty > 0 AND COALESCE(pi.pcs_in_pack, p.pcs_in_pack, 1) > 0
+                THEN (pi.total / pi.qty) * COALESCE(pi.pcs_in_pack, p.pcs_in_pack, 1)
+              ELSE pi.purchase_price
+            END
+           FROM purchase_items pi 
+           JOIN purchases pu ON pu.id = pi.purchase_id
+           WHERE pi.product_id = p.id
+           ORDER BY pu.created_at DESC LIMIT 1),
+          p.trade_price
+        ) as current_purchase_price,
         
-        -- ALWAYS show LATEST profit % (even if that batch is sold out)
-        (SELECT pi.profit_percent
-         FROM purchase_items pi 
-         JOIN purchases pu ON pu.id = pi.purchase_id
-         WHERE pi.product_id = p.id
-         ORDER BY pu.created_at DESC LIMIT 1) as profit_percent,
+        -- FIFO Batch Profit % (oldest expiring batch with available stock; fallback to latest purchase)
+        COALESCE(
+          (SELECT pi.profit_percent
+           FROM purchase_items pi 
+           JOIN purchases pu ON pu.id = pi.purchase_id
+           WHERE pi.product_id = p.id 
+           AND pi.qty > pi.qty_sold
+           AND (pi.expiry_date IS NULL OR pi.expiry_date >= date('now'))
+           ORDER BY pi.expiry_date ASC NULLS LAST, pu.created_at ASC LIMIT 1),
+          (SELECT pi.profit_percent
+           FROM purchase_items pi 
+           JOIN purchases pu ON pu.id = pi.purchase_id
+           WHERE pi.product_id = p.id
+           ORDER BY pu.created_at DESC LIMIT 1)
+        ) as profit_percent,
         
         -- Current active purchase entry stock (FIFO by EXPIRY DATE)
         (SELECT (pi.qty - pi.qty_sold) FROM purchase_items pi 

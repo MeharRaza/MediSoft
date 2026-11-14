@@ -151,8 +151,17 @@ module.exports = (ipcMain) => {
     const actualCOGS = db.prepare(`
       SELECT COALESCE(SUM(
         si.qty * (
-          COALESCE(pi.purchase_price, p.trade_price, 0) / 
-          CASE WHEN COALESCE(pi.pcs_in_pack, p.pcs_in_pack, 1) <= 0 THEN 1 ELSE COALESCE(pi.pcs_in_pack, p.pcs_in_pack, 1) END
+          CASE
+            WHEN pi.profit_percent IS NOT NULL AND pi.profit_percent != 0
+              THEN ((pi.sale_price / CASE WHEN COALESCE(pi.pcs_in_pack, p.pcs_in_pack, 1) <= 0 THEN 1 ELSE COALESCE(pi.pcs_in_pack, p.pcs_in_pack, 1) END) * (1 - pi.profit_percent / 100.0))
+            WHEN pi.total > 0 AND pi.qty > 0
+              THEN (pi.total / pi.qty)
+            WHEN (pi.qty_in_boxes + COALESCE(pi.bonus, 0)) > 0 AND pi.bonus > 0
+              THEN ((pi.purchase_price * pi.qty_in_boxes) / ((pi.qty_in_boxes + pi.bonus) * CASE WHEN COALESCE(pi.pcs_in_pack, p.pcs_in_pack, 1) <= 0 THEN 1 ELSE COALESCE(pi.pcs_in_pack, p.pcs_in_pack, 1) END))
+            WHEN pi.purchase_price > 0
+              THEN (pi.purchase_price / CASE WHEN COALESCE(pi.pcs_in_pack, p.pcs_in_pack, 1) <= 0 THEN 1 ELSE COALESCE(pi.pcs_in_pack, p.pcs_in_pack, 1) END)
+            ELSE (COALESCE(p.trade_price, 0) / CASE WHEN COALESCE(p.pcs_in_pack, 1) <= 0 THEN 1 ELSE COALESCE(p.pcs_in_pack, 1) END)
+          END
         )
       ), 0) as t
       FROM sale_items si
@@ -167,8 +176,17 @@ module.exports = (ipcMain) => {
     const returnedCOGS = db.prepare(`
       SELECT COALESCE(SUM(
         sri.qty * (
-          COALESCE(pi.purchase_price, p.trade_price, 0) / 
-          CASE WHEN COALESCE(pi.pcs_in_pack, p.pcs_in_pack, 1) <= 0 THEN 1 ELSE COALESCE(pi.pcs_in_pack, p.pcs_in_pack, 1) END
+          CASE
+            WHEN pi.profit_percent IS NOT NULL AND pi.profit_percent != 0
+              THEN ((pi.sale_price / CASE WHEN COALESCE(pi.pcs_in_pack, p.pcs_in_pack, 1) <= 0 THEN 1 ELSE COALESCE(pi.pcs_in_pack, p.pcs_in_pack, 1) END) * (1 - pi.profit_percent / 100.0))
+            WHEN pi.total > 0 AND pi.qty > 0
+              THEN (pi.total / pi.qty)
+            WHEN (pi.qty_in_boxes + COALESCE(pi.bonus, 0)) > 0 AND pi.bonus > 0
+              THEN ((pi.purchase_price * pi.qty_in_boxes) / ((pi.qty_in_boxes + pi.bonus) * CASE WHEN COALESCE(pi.pcs_in_pack, p.pcs_in_pack, 1) <= 0 THEN 1 ELSE COALESCE(pi.pcs_in_pack, p.pcs_in_pack, 1) END))
+            WHEN pi.purchase_price > 0
+              THEN (pi.purchase_price / CASE WHEN COALESCE(pi.pcs_in_pack, p.pcs_in_pack, 1) <= 0 THEN 1 ELSE COALESCE(pi.pcs_in_pack, p.pcs_in_pack, 1) END)
+            ELSE (COALESCE(p.trade_price, 0) / CASE WHEN COALESCE(p.pcs_in_pack, 1) <= 0 THEN 1 ELSE COALESCE(p.pcs_in_pack, 1) END)
+          END
         )
       ), 0) as t
       FROM sale_return_items sri

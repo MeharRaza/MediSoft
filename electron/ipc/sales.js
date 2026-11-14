@@ -301,22 +301,30 @@ module.exports = (ipcMain) => {
         let purchasePrice = 0
         if (purchaseItemId) {
           const purchaseItem = db.prepare(`
-            SELECT purchase_price, pcs_in_pack 
+            SELECT purchase_price, sale_price, pcs_in_pack, profit_percent, total, qty, bonus, qty_in_boxes 
             FROM purchase_items 
             WHERE id=?
           `).get(purchaseItemId)
           
           if (purchaseItem) {
-            // Calculate per-piece purchase price
+            // Calculate effective per-piece purchase price (accounting for profit_percent, bonus, and discounts)
             const pcsInPack = purchaseItem.pcs_in_pack || 1
-            purchasePrice = purchaseItem.purchase_price / pcsInPack
+            if (purchaseItem.profit_percent && purchaseItem.profit_percent !== 0) {
+              purchasePrice = (purchaseItem.sale_price / pcsInPack) * (1 - (purchaseItem.profit_percent / 100))
+            } else if (purchaseItem.total > 0 && purchaseItem.qty > 0) {
+              purchasePrice = purchaseItem.total / purchaseItem.qty
+            } else if (purchaseItem.bonus > 0 && (purchaseItem.qty_in_boxes + purchaseItem.bonus) > 0) {
+              purchasePrice = (purchaseItem.purchase_price * purchaseItem.qty_in_boxes) / ((purchaseItem.qty_in_boxes + purchaseItem.bonus) * pcsInPack)
+            } else {
+              purchasePrice = purchaseItem.purchase_price / pcsInPack
+            }
             
             // Calculate returned profit for this item
             const itemReturnedProfit = (item.price - purchasePrice) * item.qty
             totalReturnedProfit += itemReturnedProfit
             
             console.log(`   📊 Item profit calculation:`)
-            console.log(`      Sale Price: ${item.price}, Purchase Price: ${purchasePrice}`)
+            console.log(`      Sale Price: ${item.price}, Effective Purchase Price: ${purchasePrice.toFixed(2)}`)
             console.log(`      Qty: ${item.qty}, Returned Profit: ${itemReturnedProfit.toFixed(2)}`)
           }
         }
@@ -518,10 +526,20 @@ module.exports = (ipcMain) => {
           SUM(
             -- Actual revenue for this item after all discounts
             COALESCE(((si.total / NULLIF(s.sub_total, 0)) * s.grand_total), si.total, 0)
-            -- Minus cost price (use purchase batch cost, or product trade_price fallback)
+            -- Minus cost price (use purchase batch cost with bonus/profit_percent, or product trade_price fallback)
             - (
-                (COALESCE(pi.purchase_price, p.trade_price, 0) / 
-                 CASE WHEN COALESCE(pi.pcs_in_pack, p.pcs_in_pack, 1) <= 0 THEN 1 ELSE COALESCE(pi.pcs_in_pack, p.pcs_in_pack, 1) END
+                (
+                  CASE
+                    WHEN pi.profit_percent IS NOT NULL AND pi.profit_percent != 0
+                      THEN ((pi.sale_price / CASE WHEN COALESCE(pi.pcs_in_pack, p.pcs_in_pack, 1) <= 0 THEN 1 ELSE COALESCE(pi.pcs_in_pack, p.pcs_in_pack, 1) END) * (1 - pi.profit_percent / 100.0))
+                    WHEN pi.total > 0 AND pi.qty > 0
+                      THEN (pi.total / pi.qty)
+                    WHEN (pi.qty_in_boxes + COALESCE(pi.bonus, 0)) > 0 AND pi.bonus > 0
+                      THEN ((pi.purchase_price * pi.qty_in_boxes) / ((pi.qty_in_boxes + pi.bonus) * CASE WHEN COALESCE(pi.pcs_in_pack, p.pcs_in_pack, 1) <= 0 THEN 1 ELSE COALESCE(pi.pcs_in_pack, p.pcs_in_pack, 1) END))
+                    WHEN pi.purchase_price > 0
+                      THEN (pi.purchase_price / CASE WHEN COALESCE(pi.pcs_in_pack, p.pcs_in_pack, 1) <= 0 THEN 1 ELSE COALESCE(pi.pcs_in_pack, p.pcs_in_pack, 1) END)
+                    ELSE (COALESCE(p.trade_price, 0) / CASE WHEN COALESCE(p.pcs_in_pack, 1) <= 0 THEN 1 ELSE COALESCE(p.pcs_in_pack, 1) END)
+                  END
                 ) * si.qty
               )
           ),
@@ -544,8 +562,18 @@ module.exports = (ipcMain) => {
             COALESCE(((sri.qty * sri.price) / NULLIF((SELECT SUM(qty * price) FROM sale_return_items WHERE return_id = sri.return_id), 0)) * sr.total, sri.qty * sri.price, 0)
             -- Minus cost price of returned items
             - (
-                (COALESCE(pi.purchase_price, p.trade_price, 0) / 
-                 CASE WHEN COALESCE(pi.pcs_in_pack, p.pcs_in_pack, 1) <= 0 THEN 1 ELSE COALESCE(pi.pcs_in_pack, p.pcs_in_pack, 1) END
+                (
+                  CASE
+                    WHEN pi.profit_percent IS NOT NULL AND pi.profit_percent != 0
+                      THEN ((pi.sale_price / CASE WHEN COALESCE(pi.pcs_in_pack, p.pcs_in_pack, 1) <= 0 THEN 1 ELSE COALESCE(pi.pcs_in_pack, p.pcs_in_pack, 1) END) * (1 - pi.profit_percent / 100.0))
+                    WHEN pi.total > 0 AND pi.qty > 0
+                      THEN (pi.total / pi.qty)
+                    WHEN (pi.qty_in_boxes + COALESCE(pi.bonus, 0)) > 0 AND pi.bonus > 0
+                      THEN ((pi.purchase_price * pi.qty_in_boxes) / ((pi.qty_in_boxes + pi.bonus) * CASE WHEN COALESCE(pi.pcs_in_pack, p.pcs_in_pack, 1) <= 0 THEN 1 ELSE COALESCE(pi.pcs_in_pack, p.pcs_in_pack, 1) END))
+                    WHEN pi.purchase_price > 0
+                      THEN (pi.purchase_price / CASE WHEN COALESCE(pi.pcs_in_pack, p.pcs_in_pack, 1) <= 0 THEN 1 ELSE COALESCE(pi.pcs_in_pack, p.pcs_in_pack, 1) END)
+                    ELSE (COALESCE(p.trade_price, 0) / CASE WHEN COALESCE(p.pcs_in_pack, 1) <= 0 THEN 1 ELSE COALESCE(p.pcs_in_pack, 1) END)
+                  END
                 ) * sri.qty
               )
           ),

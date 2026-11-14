@@ -460,25 +460,24 @@ export default function InvoiceSettings() {
               <div 
                 id="thermal-receipt"
                 style={{
-                  width: '70mm',
+                  width: '72mm',
                   maxWidth: '100%',
                   background: '#ffffff',
                   color: '#000000',
-                  padding: '3mm 3mm',
+                  padding: '2mm 4mm',
                   boxSizing: 'border-box',
-                  fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+                  fontFamily: 'Arial, Helvetica, sans-serif',
                   boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
                   borderRadius: '2px',
-                  lineHeight: 1.35,
-                  fontWeight: 'normal'
+                  lineHeight: 1.4
                 }}
               >
                 {/* Header Title */}
                 <div 
                   style={{
                     textAlign: 'center',
-                    fontWeight: 'normal',
-                    fontSize: `${form.header_font_size}px`,
+                    fontWeight: 'bold',
+                    fontSize: '16px',
                     letterSpacing: '0.2px',
                     wordBreak: 'break-word'
                   }}
@@ -486,167 +485,162 @@ export default function InvoiceSettings() {
                   {form.store_name || 'Harmain Medical Store'}
                 </div>
 
-                {/* Subtitle / Tagline */}
-                {form.tagline ? (
-                  <div 
-                    style={{
-                      textAlign: 'center',
-                      fontSize: `${Math.max(9, form.address_font_size - 1)}px`,
-                      fontStyle: 'italic',
-                      marginTop: '1px',
-                      fontWeight: 'normal'
-                    }}
-                  >
-                    {form.tagline}
-                  </div>
-                ) : null}
-
                 {/* Address */}
-                {form.address ? (
-                  <div 
-                    style={{
-                      textAlign: 'center',
-                      fontSize: `${form.address_font_size}px`,
-                      marginTop: '2px',
-                      lineHeight: 1.25,
-                      fontWeight: 'normal'
-                    }}
-                  >
-                    {form.address}
-                  </div>
-                ) : null}
+                <div 
+                  style={{
+                    textAlign: 'center',
+                    fontSize: '13px',
+                    marginTop: '2px',
+                    lineHeight: 1.3
+                  }}
+                >
+                  {form.address || 'Opposite Nadra Kiosik Main Bazar Raiwind'}
+                </div>
 
                 {/* Phone */}
-                {form.phone ? (
-                  <div 
-                    style={{
-                      textAlign: 'center',
-                      fontSize: `${form.address_font_size}px`,
-                      marginTop: '2px',
-                      fontWeight: 'normal'
-                    }}
-                  >
-                    Phone #: {form.phone}
-                  </div>
-                ) : null}
+                <div 
+                  style={{
+                    textAlign: 'center',
+                    fontSize: '13px',
+                    marginTop: '2px'
+                  }}
+                >
+                  Phone #: {form.phone || '03228684603'}
+                </div>
 
                 {/* Divider Line */}
-                <div style={{ borderTop: '1px dashed #000', margin: '3px 0' }}></div>
+                <div style={{ borderTop: '1px dashed #000', margin: '4px 0' }}></div>
 
                 {/* Invoice Meta */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: `${form.meta_font_size}px`, fontWeight: 'normal' }}>
-                  <span>No. INV-15745</span>
-                  <span>14/11/2026 19:30</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
+                  <span>No. INV-15666</span>
+                  <span>14/11/2026 13:16</span>
                 </div>
-                <div style={{ fontSize: `${form.meta_font_size}px`, fontWeight: 'normal' }}>
-                  M/s: Walk-in Customer
+                <div style={{ fontSize: '11px' }}>
+                  M/a: Walk-in Customer
                 </div>
 
                 {/* Divider Line */}
-                <div style={{ borderTop: '1px dashed #000', margin: '3px 0' }}></div>
+                <div style={{ borderTop: '1px dashed #000', margin: '4px 0' }}></div>
 
                 {/* Table Header */}
                 <div 
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: form.show_discount_col ? '40% 12% 17% 13% 18%' : '48% 14% 19% 19%',
-                    fontSize: `${Math.max(9.5, form.item_font_size - 0.5)}px`,
-                    fontWeight: 'normal',
-                    marginBottom: '2px',
-                    letterSpacing: '0.2px'
+                    gridTemplateColumns: '45% 15% 20% 20%',
+                    fontSize: '11px',
+                    fontWeight: 'bold',
+                    marginBottom: '3px'
                   }}
                 >
-                  <div>Item</div>
+                  <div>Item Name</div>
                   <div style={{ textAlign: 'right' }}>Qty</div>
                   <div style={{ textAlign: 'right' }}>Price</div>
-                  {form.show_discount_col ? <div style={{ textAlign: 'right' }}>Disc</div> : null}
                   <div style={{ textAlign: 'right' }}>Total</div>
                 </div>
 
                 {/* Sample Items (matching user receipt photo!) */}
-                <div style={{ fontSize: `${form.item_font_size}px` }}>
+                <div style={{ fontSize: '11px' }}>
                   {/* Item 1 */}
                   <div 
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: form.show_discount_col ? '40% 12% 17% 13% 18%' : '48% 14% 19% 19%',
-                      marginBottom: '2px',
-                      alignItems: 'baseline',
-                      fontWeight: 'normal'
+                      gridTemplateColumns: '45% 15% 20% 20%',
+                      marginBottom: '3px'
                     }}
                   >
-                    <div style={{ fontWeight: 'normal', wordBreak: 'break-word', paddingRight: '3px' }}>GESTOFIL SYP 120ML</div>
-                    <div style={{ textAlign: 'right' }}>1</div>
-                    <div style={{ textAlign: 'right' }}>160.00</div>
-                    {form.show_discount_col ? <div style={{ textAlign: 'right' }}>-</div> : null}
-                    <div style={{ textAlign: 'right' }}>160.00</div>
+                    <div style={{ wordBreak: 'break-word', paddingRight: '2px' }}>OMEGA 20MG CAP</div>
+                    <div style={{ textAlign: 'right' }}>3</div>
+                    <div style={{ textAlign: 'right' }}>27.86</div>
+                    <div style={{ textAlign: 'right' }}>83.57</div>
                   </div>
 
                   {/* Item 2 */}
                   <div 
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: form.show_discount_col ? '40% 12% 17% 13% 18%' : '48% 14% 19% 19%',
-                      marginBottom: '2px',
-                      alignItems: 'baseline',
-                      fontWeight: 'normal'
+                      gridTemplateColumns: '45% 15% 20% 20%',
+                      marginBottom: '3px'
                     }}
                   >
-                    <div style={{ fontWeight: 'normal', wordBreak: 'break-word', paddingRight: '3px' }}>GESTOFIL TAB</div>
-                    <div style={{ textAlign: 'right' }}>20</div>
-                    <div style={{ textAlign: 'right' }}>2.50</div>
-                    {form.show_discount_col ? <div style={{ textAlign: 'right' }}>-</div> : null}
-                    <div style={{ textAlign: 'right' }}>50.00</div>
+                    <div style={{ wordBreak: 'break-word', paddingRight: '2px' }}>KESTINE 10MG TAB</div>
+                    <div style={{ textAlign: 'right' }}>3</div>
+                    <div style={{ textAlign: 'right' }}>21.24</div>
+                    <div style={{ textAlign: 'right' }}>63.71</div>
                   </div>
 
                   {/* Item 3 */}
                   <div 
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: form.show_discount_col ? '40% 12% 17% 13% 18%' : '48% 14% 19% 19%',
-                      marginBottom: '2px',
-                      alignItems: 'baseline',
-                      fontWeight: 'normal'
+                      gridTemplateColumns: '45% 15% 20% 20%',
+                      marginBottom: '3px'
                     }}
                   >
-                    <div style={{ fontWeight: 'normal', wordBreak: 'break-word', paddingRight: '3px' }}>RISEK 40MG CAP</div>
-                    <div style={{ textAlign: 'right' }}>7</div>
-                    <div style={{ textAlign: 'right' }}>41.00</div>
-                    {form.show_discount_col ? <div style={{ textAlign: 'right' }}>-</div> : null}
-                    <div style={{ textAlign: 'right' }}>287.00</div>
+                    <div style={{ wordBreak: 'break-word', paddingRight: '2px' }}>MYTEKA 10MG TAB</div>
+                    <div style={{ textAlign: 'right' }}>3</div>
+                    <div style={{ textAlign: 'right' }}>39.57</div>
+                    <div style={{ textAlign: 'right' }}>118.71</div>
+                  </div>
+
+                  {/* Item 4 */}
+                  <div 
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '45% 15% 20% 20%',
+                      marginBottom: '3px'
+                    }}
+                  >
+                    <div style={{ wordBreak: 'break-word', paddingRight: '2px' }}>DR KOFF CANDY(RS#10)</div>
+                    <div style={{ textAlign: 'right' }}>10</div>
+                    <div style={{ textAlign: 'right' }}>10.00</div>
+                    <div style={{ textAlign: 'right' }}>100.00</div>
+                  </div>
+
+                  {/* Item 5 */}
+                  <div 
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '45% 15% 20% 20%',
+                      marginBottom: '3px'
+                    }}
+                  >
+                    <div style={{ wordBreak: 'break-word', paddingRight: '2px' }}>GOURMET 1.5 LTR (LEMON)</div>
+                    <div style={{ textAlign: 'right' }}>1</div>
+                    <div style={{ textAlign: 'right' }}>160.00</div>
+                    <div style={{ textAlign: 'right' }}>160.00</div>
                   </div>
                 </div>
 
                 {/* Divider Line */}
-                <div style={{ borderTop: '1px dashed #000', margin: '3px 0' }}></div>
+                <div style={{ borderTop: '1px dashed #000', margin: '4px 0' }}></div>
 
                 {/* Gross Total */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: `${form.total_font_size}px`, padding: '1px 0', fontWeight: 'normal' }}>
-                  <span>Gross Total:</span>
-                  <span style={{ textAlign: 'right' }}>497.00</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
+                  <span style={{ flex: 1, textAlign: 'center' }}>Gross Total:</span>
+                  <span style={{ textAlign: 'right', minWidth: '80px' }}>525.99</span>
                 </div>
 
                 {/* Discount */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: `${form.total_font_size}px`, padding: '1px 0', fontWeight: 'normal' }}>
-                  <span>Discount:</span>
-                  <span style={{ textAlign: 'right' }}>- 26.85</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
+                  <span style={{ flex: 1, textAlign: 'center' }}>Discount:</span>
+                  <span style={{ textAlign: 'right', minWidth: '80px' }}>26.30</span>
                 </div>
 
                 {/* Divider Line */}
-                <div style={{ borderTop: '1px dashed #000', margin: '3px 0' }}></div>
+                <div style={{ borderTop: '1px dashed #000', margin: '4px 0' }}></div>
 
                 {/* Net Total */}
                 <div 
                   style={{
                     display: 'flex',
                     justifyContent: 'space-between',
-                    fontSize: `${form.total_font_size + 2}px`,
-                    fontWeight: 'normal',
-                    padding: '1px 0'
+                    fontSize: '13px',
+                    fontWeight: 'bold'
                   }}
                 >
-                  <span>Net Total</span>
-                  <span style={{ textAlign: 'right' }}>Rs. 470.15</span>
+                  <span style={{ flex: 1, textAlign: 'center' }}>Net Total</span>
+                  <span style={{ textAlign: 'right', minWidth: '80px' }}>499.69</span>
                 </div>
 
                 {/* Divider Line */}

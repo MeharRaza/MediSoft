@@ -283,21 +283,24 @@ function runMigrations() {
       console.log('✅ expenses table already exists')
     }
     
-    // Migration 12: Clean, non-bold standard thermal receipt settings
+    // Migration 12: Exact match to user desired receipt format
     const invoiceSettingsTable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='invoice_settings'").get()
     if (invoiceSettingsTable) {
       db.prepare(`
         UPDATE invoice_settings 
-        SET paper_width = '80mm',
+        SET store_name = 'Harmain Medical Store',
+            address = 'Opposite Nadra Kiosik Main Bazar Raiwind',
+            phone = '03228684603',
+            paper_width = '80mm',
             header_font_size = 16,
-            address_font_size = 11,
-            meta_font_size = 10.5,
+            address_font_size = 13,
+            meta_font_size = 11,
             item_font_size = 11,
-            total_font_size = 11,
-            footer_font_size = 9.5
+            total_font_size = 13,
+            footer_font_size = 9
         WHERE id = 1
       `).run()
-      console.log('✅ invoice_settings updated to clean, non-bold 80mm format')
+      console.log('✅ invoice_settings updated to exact user format')
     }
 
     console.log('✅ All migrations checked and applied successfully!')

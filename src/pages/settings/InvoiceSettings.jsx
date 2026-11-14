@@ -9,12 +9,12 @@ export default function InvoiceSettings() {
     address: 'Opposite Nadra Kiosk Main Bazar Raiwind',
     phone: '03228684603',
     paper_width: '85mm',
-    header_font_size: 18,
-    address_font_size: 12,
-    meta_font_size: 11,
-    item_font_size: 11,
-    total_font_size: 13,
-    footer_font_size: 10,
+    header_font_size: 20,
+    address_font_size: 13,
+    meta_font_size: 12,
+    item_font_size: 12,
+    total_font_size: 14,
+    footer_font_size: 11,
     footer_terms: 'LOOSE ITEMS, VACCINES, INHALERS AND\nFRIDGE ITEMS WILL NOT BE RETURNED.',
     thank_you_msg: 'Thank You For Your Visit!',
     show_discount_col: 1,
@@ -31,12 +31,12 @@ export default function InvoiceSettings() {
         setForm(prev => ({
           ...prev,
           ...s,
-          header_font_size: Number(s.header_font_size) || 18,
-          address_font_size: Number(s.address_font_size) || 12,
-          meta_font_size: Number(s.meta_font_size) || 11,
-          item_font_size: Number(s.item_font_size) || 11,
-          total_font_size: Number(s.total_font_size) || 13,
-          footer_font_size: Number(s.footer_font_size) || 10,
+          header_font_size: Number(s.header_font_size) || 20,
+          address_font_size: Number(s.address_font_size) || 13,
+          meta_font_size: Number(s.meta_font_size) || 12,
+          item_font_size: Number(s.item_font_size) || 12,
+          total_font_size: Number(s.total_font_size) || 14,
+          footer_font_size: Number(s.footer_font_size) || 11,
           show_discount_col: s.show_discount_col ?? 1,
           show_customer_name: s.show_customer_name ?? 1
         }))
@@ -88,12 +88,12 @@ export default function InvoiceSettings() {
       address: 'Opposite Nadra Kiosk Main Bazar Raiwind',
       phone: '03228684603',
       paper_width: '85mm',
-      header_font_size: 18,
-      address_font_size: 12,
-      meta_font_size: 11,
-      item_font_size: 11,
-      total_font_size: 13,
-      footer_font_size: 10,
+      header_font_size: 20,
+      address_font_size: 13,
+      meta_font_size: 12,
+      item_font_size: 12,
+      total_font_size: 14,
+      footer_font_size: 11,
       footer_terms: 'LOOSE ITEMS, VACCINES, INHALERS AND\nFRIDGE ITEMS WILL NOT BE RETURNED.',
       thank_you_msg: 'Thank You For Your Visit!',
       show_discount_col: 1,
@@ -545,10 +545,11 @@ export default function InvoiceSettings() {
                 <div 
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: form.show_discount_col ? '46% 12% 14% 12% 16%' : '54% 14% 14% 18%',
-                    fontSize: `${Math.max(9, form.item_font_size - 1)}px`,
+                    gridTemplateColumns: form.show_discount_col ? '44% 12% 15% 13% 16%' : '52% 14% 16% 18%',
+                    fontSize: `${Math.max(10, form.item_font_size - 1)}px`,
                     fontWeight: 'bold',
-                    marginBottom: '3px'
+                    marginBottom: '3px',
+                    letterSpacing: '0.2px'
                   }}
                 >
                   <div>Item</div>
@@ -564,12 +565,12 @@ export default function InvoiceSettings() {
                   <div 
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: form.show_discount_col ? '46% 12% 14% 12% 16%' : '54% 14% 14% 18%',
+                      gridTemplateColumns: form.show_discount_col ? '44% 12% 15% 13% 16%' : '52% 14% 16% 18%',
                       marginBottom: '2px',
                       alignItems: 'baseline'
                     }}
                   >
-                    <div style={{ fontWeight: '500', wordBreak: 'break-word', paddingRight: '2px' }}>GESTOFIL SYP 120ML</div>
+                    <div style={{ fontWeight: '600', wordBreak: 'break-word', paddingRight: '4px' }}>GESTOFIL SYP 120ML</div>
                     <div style={{ textAlign: 'right' }}>1</div>
                     <div style={{ textAlign: 'right' }}>160.00</div>
                     {form.show_discount_col ? <div style={{ textAlign: 'right' }}>-</div> : null}
@@ -580,12 +581,12 @@ export default function InvoiceSettings() {
                   <div 
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: form.show_discount_col ? '46% 12% 14% 12% 16%' : '54% 14% 14% 18%',
+                      gridTemplateColumns: form.show_discount_col ? '44% 12% 15% 13% 16%' : '52% 14% 16% 18%',
                       marginBottom: '2px',
                       alignItems: 'baseline'
                     }}
                   >
-                    <div style={{ fontWeight: '500', wordBreak: 'break-word', paddingRight: '2px' }}>GESTOFIL TAB</div>
+                    <div style={{ fontWeight: '600', wordBreak: 'break-word', paddingRight: '4px' }}>GESTOFIL TAB</div>
                     <div style={{ textAlign: 'right' }}>20</div>
                     <div style={{ textAlign: 'right' }}>2.50</div>
                     {form.show_discount_col ? <div style={{ textAlign: 'right' }}>-</div> : null}
@@ -596,12 +597,12 @@ export default function InvoiceSettings() {
                   <div 
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: form.show_discount_col ? '46% 12% 14% 12% 16%' : '54% 14% 14% 18%',
+                      gridTemplateColumns: form.show_discount_col ? '44% 12% 15% 13% 16%' : '52% 14% 16% 18%',
                       marginBottom: '2px',
                       alignItems: 'baseline'
                     }}
                   >
-                    <div style={{ fontWeight: '500', wordBreak: 'break-word', paddingRight: '2px' }}>RISEK 40MG CAP</div>
+                    <div style={{ fontWeight: '600', wordBreak: 'break-word', paddingRight: '4px' }}>RISEK 40MG CAP</div>
                     <div style={{ textAlign: 'right' }}>7</div>
                     <div style={{ textAlign: 'right' }}>41.00</div>
                     {form.show_discount_col ? <div style={{ textAlign: 'right' }}>-</div> : null}
@@ -613,15 +614,15 @@ export default function InvoiceSettings() {
                 <div style={{ borderTop: '1px dashed #000', margin: '4px 0' }}></div>
 
                 {/* Gross Total */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: `${form.total_font_size}px` }}>
-                  <span style={{ flex: 1, textAlign: 'center' }}>Gross Total:</span>
-                  <span style={{ textAlign: 'right', minWidth: '70px' }}>497.00</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: `${form.total_font_size}px`, padding: '1px 0' }}>
+                  <span style={{ fontWeight: '500' }}>Gross Total:</span>
+                  <span style={{ textAlign: 'right', fontWeight: 'bold' }}>497.00</span>
                 </div>
 
                 {/* Discount */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: `${form.total_font_size}px` }}>
-                  <span style={{ flex: 1, textAlign: 'center' }}>Discount:</span>
-                  <span style={{ textAlign: 'right', minWidth: '70px' }}>26.85</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: `${form.total_font_size}px`, padding: '1px 0' }}>
+                  <span style={{ fontWeight: '500' }}>Discount:</span>
+                  <span style={{ textAlign: 'right', fontWeight: 'bold' }}>- 26.85</span>
                 </div>
 
                 {/* Divider Line */}
@@ -632,12 +633,13 @@ export default function InvoiceSettings() {
                   style={{
                     display: 'flex',
                     justifyContent: 'space-between',
-                    fontSize: `${form.total_font_size + 2}px`,
-                    fontWeight: 'bold'
+                    fontSize: `${form.total_font_size + 3}px`,
+                    fontWeight: '900',
+                    padding: '2px 0'
                   }}
                 >
-                  <span style={{ flex: 1, textAlign: 'center' }}>Net Total</span>
-                  <span style={{ textAlign: 'right', minWidth: '70px' }}>470.15</span>
+                  <span>Net Total</span>
+                  <span style={{ textAlign: 'right' }}>Rs. 470.15</span>
                 </div>
 
                 {/* Divider Line */}
@@ -673,3 +675,4 @@ export default function InvoiceSettings() {
     </div>
   )
 }
+

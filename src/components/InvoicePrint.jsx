@@ -13,12 +13,12 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false }) {
     address: 'Opposite Nadra Kiosk Main Bazar Raiwind',
     phone: '03228684603',
     paper_width: '85mm',
-    header_font_size: 18,
-    address_font_size: 12,
-    meta_font_size: 11,
-    item_font_size: 11,
-    total_font_size: 13,
-    footer_font_size: 10,
+    header_font_size: 20,
+    address_font_size: 13,
+    meta_font_size: 12,
+    item_font_size: 12,
+    total_font_size: 14,
+    footer_font_size: 11,
     footer_terms: 'LOOSE ITEMS, VACCINES, INHALERS AND FRIDGE ITEMS WILL NOT BE RETURNED.',
     thank_you_msg: 'Thank You For Your Visit!',
     show_discount_col: 1,
@@ -130,10 +130,42 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false }) {
       {/* Print Styles */}
       <style>{`
         @media print {
+          @page {
+            size: auto;
+            margin: 0mm !important;
+          }
+          
+          html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+            min-width: 100% !important;
+            max-width: 100% !important;
+            background: #ffffff !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          
           body * {
             visibility: hidden;
           }
           
+          .invoice-modal-backdrop,
+          .invoice-modal-container {
+            position: static !important;
+            display: block !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+            background: transparent !important;
+            box-shadow: none !important;
+            border: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+          }
+
           #thermal-receipt, #thermal-receipt * {
             visibility: visible;
           }
@@ -142,23 +174,23 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false }) {
             position: absolute !important;
             left: 0 !important;
             top: 0 !important;
-            width: ${settings.paper_width === '85mm' ? '85mm' : '80mm'} !important;
+            width: 100% !important;
+            min-width: 100% !important;
             max-width: 100% !important;
             margin: 0 !important;
-            padding: 2mm 3mm !important;
+            padding: 2mm 3.5mm 6mm 3.5mm !important;
             box-sizing: border-box !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
             transform: none !important;
+            background: #ffffff !important;
           }
           
-          @page {
-            size: ${settings.paper_width === '85mm' ? '85mm' : '80mm'} auto;
-            margin: 0mm;
-          }
-          
-          body {
-            margin: 0 !important;
-            padding: 0 !important;
-            background: white !important;
+          .line {
+            border-top: 1px dashed #000000 !important;
+            width: 100% !important;
+            display: block !important;
+            margin: 4px 0 !important;
           }
           
           .no-print {
@@ -167,15 +199,15 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false }) {
         }
         
         #thermal-receipt {
-          font-family: Arial, Helvetica, sans-serif;
-          width: ${settings.paper_width === '85mm' ? '85mm' : '80mm'};
-          max-width: 100%;
-          background: white;
-          padding: 3mm 4mm;
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+          width: 100%;
+          max-width: 380px;
+          background: #ffffff;
+          padding: 16px 14px;
           box-sizing: border-box;
-          font-size: ${settings.item_font_size || 11}px;
+          font-size: ${settings.item_font_size || 12}px;
           line-height: 1.35;
-          color: #000;
+          color: #000000;
           box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
           margin: 0 auto;
         }
@@ -189,18 +221,14 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false }) {
         }
         
         .line {
-          border-top: 1px dashed #000;
+          border-top: 1px dashed #000000;
           margin: 4px 0;
+          width: 100%;
         }
         
         .space-between {
           display: flex;
           justify-content: space-between;
-        }
-        
-        .items-table {
-          width: 100%;
-          border-collapse: collapse;
         }
       `}</style>
 
@@ -242,10 +270,11 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false }) {
         {/* Items Header - Grid Layout with Discount column */}
         <div style={{ 
           display: 'grid',
-          gridTemplateColumns: settings.show_discount_col ? '46% 12% 14% 12% 16%' : '54% 14% 14% 18%',
-          fontSize: `${(settings.item_font_size || 11) - 1}px`,
+          gridTemplateColumns: settings.show_discount_col ? '44% 12% 15% 13% 16%' : '52% 14% 16% 18%',
+          fontSize: `${Math.max(10, (settings.item_font_size || 12) - 1)}px`,
           marginBottom: '3px',
-          fontWeight: 'bold'
+          fontWeight: 'bold',
+          letterSpacing: '0.2px'
         }}>
           <div>Item</div>
           <div style={{ textAlign: 'right' }}>Qty</div>
@@ -263,12 +292,12 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false }) {
           return (
             <div key={idx} style={{ 
               display: 'grid',
-              gridTemplateColumns: settings.show_discount_col ? '46% 12% 14% 12% 16%' : '54% 14% 14% 18%',
-              fontSize: `${settings.item_font_size || 11}px`,
-              marginBottom: '2px',
+              gridTemplateColumns: settings.show_discount_col ? '44% 12% 15% 13% 16%' : '52% 14% 16% 18%',
+              fontSize: `${settings.item_font_size || 12}px`,
+              marginBottom: '3px',
               alignItems: 'baseline'
             }}>
-              <div style={{ fontWeight: '500', wordBreak: 'break-word', paddingRight: '2px' }}>{item.product_name}</div>
+              <div style={{ fontWeight: '600', wordBreak: 'break-word', paddingRight: '4px', lineHeight: 1.25 }}>{item.product_name}</div>
               <div style={{ textAlign: 'right' }}>{item.qty}</div>
               <div style={{ textAlign: 'right' }}>{fmt(item.sale_price)}</div>
               {settings.show_discount_col ? (
@@ -283,30 +312,43 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false }) {
         
         <div className="line"></div>
         
-        {/* Totals - Labels centered, values right-aligned */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: `${settings.total_font_size || 13}px` }}>
-          <span style={{ flex: 1, textAlign: 'center' }}>Gross Total:</span>
-          <span style={{ textAlign: 'right', minWidth: '80px' }}>{fmt(invoice.sub_total)}</span>
+        {/* Totals - Space-between for full width edge-to-edge alignment */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: `${settings.total_font_size || 14}px`, padding: '1px 0' }}>
+          <span style={{ fontWeight: '500' }}>Gross Total:</span>
+          <span style={{ textAlign: 'right', fontWeight: 'bold' }}>{fmt(invoice.sub_total)}</span>
         </div>
         
         {invoice.discount > 0 && (
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: `${settings.total_font_size || 13}px` }}>
-            <span style={{ flex: 1, textAlign: 'center' }}>Discount:</span>
-            <span style={{ textAlign: 'right', minWidth: '80px' }}>{fmt(invoice.discount)}</span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: `${settings.total_font_size || 14}px`, padding: '1px 0' }}>
+            <span style={{ fontWeight: '500' }}>Discount:</span>
+            <span style={{ textAlign: 'right', fontWeight: 'bold' }}>- {fmt(invoice.discount)}</span>
           </div>
         )}
         
         <div className="line"></div>
         
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: `${(settings.total_font_size || 13) + 2}px`, fontWeight: 'bold' }}>
-          <span style={{ flex: 1, textAlign: 'center' }}>Net Total</span>
-          <span style={{ textAlign: 'right', minWidth: '80px' }}>{fmt(invoice.grand_total)}</span>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: `${(settings.total_font_size || 14) + 3}px`, fontWeight: '900', padding: '2px 0' }}>
+          <span>Net Total</span>
+          <span style={{ textAlign: 'right' }}>Rs. {fmt(invoice.grand_total)}</span>
         </div>
+
+        {invoice.paid_amount > 0 && (
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: `${settings.meta_font_size || 12}px`, marginTop: '3px' }}>
+            <span>Paid ({invoice.payment_method || 'Cash'}):</span>
+            <span style={{ textAlign: 'right' }}>{fmt(invoice.paid_amount)}</span>
+          </div>
+        )}
+        {invoice.change_amount > 0 && (
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: `${settings.meta_font_size || 12}px` }}>
+            <span>Change:</span>
+            <span style={{ textAlign: 'right' }}>{fmt(invoice.change_amount)}</span>
+          </div>
+        )}
         
         <div className="line"></div>
         
         {/* Footer */}
-        <div className="center" style={{ fontSize: `${settings.footer_font_size || 10}px`, marginTop: '5px', lineHeight: 1.35 }}>
+        <div className="center" style={{ fontSize: `${settings.footer_font_size || 11}px`, marginTop: '5px', lineHeight: 1.35 }}>
           {settings.footer_terms ? (
             <div style={{ whiteSpace: 'pre-line' }}>{settings.footer_terms}</div>
           ) : (

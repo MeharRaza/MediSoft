@@ -1690,15 +1690,15 @@ export default function FastBilling() {
       
       {/* Print Invoice Modal */}
       {printInvoice && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center">
-          <div className="bg-white rounded-lg shadow-2xl max-w-[400px] max-h-[90vh] overflow-auto">
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center invoice-modal-backdrop">
+          <div className="bg-white rounded-lg shadow-2xl max-w-[420px] max-h-[90vh] overflow-auto invoice-modal-container">
             <InvoicePrint 
               invoice={printInvoice} 
               onClose={() => {
                 setPrintInvoice(null)
                 setAutoPrint(false)
               }} 
-              autoPrint={autoPrint}
+              autoPrint={autoPrint} 
             />
           </div>
         </div>

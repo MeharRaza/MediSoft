@@ -20,6 +20,7 @@ export default function FastBilling() {
   const [success, setSuccess] = useState(null)
   const [printInvoice, setPrintInvoice] = useState(null) // For print modal after sale
   const [autoPrint, setAutoPrint] = useState(false) // For auto-print (Ctrl+P)
+  const [invoiceSettings, setInvoiceSettings] = useState(null)
   const [customerSearch, setCustomerSearch] = useState('')
   const [selectedCustomerDropdownIndex, setSelectedCustomerDropdownIndex] = useState(0) // For customer dropdown keyboard navigation
   
@@ -123,6 +124,11 @@ export default function FastBilling() {
   }, []) // Only run once on mount
 
   useEffect(() => {
+    // Load invoice settings for instant receipt printing match
+    api.settings.getInvoiceSettings().then(s => {
+      if (s) setInvoiceSettings(s)
+    }).catch(() => {})
+
     // Load customers - with optional walk-in names if API exists
     const loadCustomers = async () => {
       try {
@@ -1699,6 +1705,7 @@ export default function FastBilling() {
                 setAutoPrint(false)
               }} 
               autoPrint={autoPrint} 
+              settings={invoiceSettings}
             />
           </div>
         </div>

@@ -145,6 +145,7 @@ module.exports = (ipcMain) => {
           meta_font_size REAL DEFAULT 12.5,
           item_font_size REAL DEFAULT 12.5,
           total_font_size REAL DEFAULT 13,
+          net_total_font_size REAL DEFAULT 16,
           footer_font_size REAL DEFAULT 10,
           footer_terms TEXT DEFAULT 'LOOSE ITEMS, VACCINES, INHALERS AND FRIDGE ITEMS WILL NOT BE RETURNED.',
           thank_you_msg TEXT DEFAULT 'Thank You For Your Visit!',
@@ -153,18 +154,29 @@ module.exports = (ipcMain) => {
           updated_at TEXT DEFAULT (datetime('now', 'localtime'))
         );
         INSERT OR IGNORE INTO invoice_settings (id, store_name, address, phone)
-        VALUES (1, 'Harmain Medical Store', 'Opposite Nadra Kiosk Main Bazar Raiwind', '03228684603');
+        VALUES (1, 'Harmain Medical Store', 'Opposite Nadra Kiosik Main Bazar Raiwind', '03228684603');
       `)
 
       const row = db.prepare('SELECT * FROM invoice_settings WHERE id = 1').get()
-      if (row) return row
+      if (row) {
+        return {
+          ...row,
+          header_font_size: Number(row.header_font_size) || 19,
+          address_font_size: Number(row.address_font_size) || 13.5,
+          meta_font_size: Number(row.meta_font_size) || 12.5,
+          item_font_size: Number(row.item_font_size) || 12.5,
+          total_font_size: Number(row.total_font_size) || 13,
+          net_total_font_size: Number(row.net_total_font_size) || 16,
+          footer_font_size: Number(row.footer_font_size) || 10
+        }
+      }
 
       const comp = db.prepare('SELECT * FROM company WHERE id = 1').get()
       return {
         id: 1,
         store_name: comp?.name || 'Harmain Medical Store',
         tagline: '',
-        address: comp?.address || 'Opposite Nadra Kiosk Main Bazar Raiwind',
+        address: comp?.address || 'Opposite Nadra Kiosik Main Bazar Raiwind',
         phone: comp?.phone || '03228684603',
         paper_width: '80mm',
         header_font_size: 19,
@@ -172,6 +184,7 @@ module.exports = (ipcMain) => {
         meta_font_size: 12.5,
         item_font_size: 12.5,
         total_font_size: 13,
+        net_total_font_size: 16,
         footer_font_size: 10,
         footer_terms: 'LOOSE ITEMS, VACCINES, INHALERS AND FRIDGE ITEMS WILL NOT BE RETURNED.',
         thank_you_msg: 'Thank You For Your Visit!',
@@ -189,11 +202,11 @@ module.exports = (ipcMain) => {
       db.prepare(`
         INSERT INTO invoice_settings (
           id, store_name, tagline, address, phone, paper_width,
-          header_font_size, address_font_size, meta_font_size, item_font_size, total_font_size, footer_font_size,
+          header_font_size, address_font_size, meta_font_size, item_font_size, total_font_size, net_total_font_size, footer_font_size,
           footer_terms, thank_you_msg, show_discount_col, show_customer_name, updated_at
         ) VALUES (
           1, ?, ?, ?, ?, ?,
-          ?, ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?, ?, ?,
           ?, ?, ?, ?, datetime('now', 'localtime')
         )
         ON CONFLICT(id) DO UPDATE SET
@@ -207,6 +220,7 @@ module.exports = (ipcMain) => {
           meta_font_size = excluded.meta_font_size,
           item_font_size = excluded.item_font_size,
           total_font_size = excluded.total_font_size,
+          net_total_font_size = excluded.net_total_font_size,
           footer_font_size = excluded.footer_font_size,
           footer_terms = excluded.footer_terms,
           thank_you_msg = excluded.thank_you_msg,
@@ -218,12 +232,13 @@ module.exports = (ipcMain) => {
         data.tagline || '',
         data.address || '',
         data.phone || '',
-        data.paper_width || '85mm',
-        Number(data.header_font_size) || 18,
-        Number(data.address_font_size) || 12,
-        Number(data.meta_font_size) || 11,
-        Number(data.item_font_size) || 11,
+        data.paper_width || '80mm',
+        Number(data.header_font_size) || 19,
+        Number(data.address_font_size) || 13.5,
+        Number(data.meta_font_size) || 12.5,
+        Number(data.item_font_size) || 12.5,
         Number(data.total_font_size) || 13,
+        Number(data.net_total_font_size) || 16,
         Number(data.footer_font_size) || 10,
         data.footer_terms ?? 'LOOSE ITEMS, VACCINES, INHALERS AND FRIDGE ITEMS WILL NOT BE RETURNED.',
         data.thank_you_msg ?? 'Thank You For Your Visit!',

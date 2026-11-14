@@ -37,6 +37,7 @@ export default function SalesHistory() {
   const [loadingDetails, setLoadingDetails] = useState(false)
   const [msg, setMsg]           = useState(null)
   const [printInvoice, setPrintInvoice] = useState(null) // For print modal
+  const [invoiceSettings, setInvoiceSettings] = useState(null)
   
   // Item History Feature
   const [showItemHistory, setShowItemHistory] = useState(false)
@@ -62,6 +63,11 @@ export default function SalesHistory() {
   }
 
   useEffect(() => { fetchInvoices() }, [])
+  useEffect(() => {
+    api.settings.getInvoiceSettings().then(s => {
+      if (s) setInvoiceSettings(s)
+    }).catch(() => {})
+  }, [])
   
   // Load all products for item history search
   useEffect(() => {
@@ -476,7 +482,7 @@ export default function SalesHistory() {
       {printInvoice && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center invoice-modal-backdrop">
           <div className="bg-white rounded-lg shadow-2xl max-w-[420px] max-h-[90vh] overflow-auto invoice-modal-container">
-            <InvoicePrint invoice={printInvoice} onClose={() => setPrintInvoice(null)} />
+            <InvoicePrint invoice={printInvoice} onClose={() => setPrintInvoice(null)} settings={invoiceSettings} />
           </div>
         </div>
       )}

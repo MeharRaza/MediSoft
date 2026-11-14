@@ -80,6 +80,12 @@ export default function InvoiceSettings() {
   const handleChange = (field, val) => {
     setForm(prev => {
       const next = { ...prev, [field]: val }
+      if (field === 'item_font_size') {
+        next.meta_font_size = val
+      }
+      if (field === 'total_font_size') {
+        next.net_total_font_size = Math.round((val + 3) * 10) / 10
+      }
       try { localStorage.setItem('invoice_settings_cache', JSON.stringify(next)) } catch (e) {}
       return next
     })
@@ -487,7 +493,7 @@ export default function InvoiceSettings() {
             {/* Realistic Thermal Paper Slip */}
             <div className="bg-[#e2e8f0] p-4 rounded-b-xl shadow-inner flex justify-center overflow-x-auto">
               <div 
-                id="thermal-receipt"
+                id="thermal-receipt-preview"
                 style={{
                   width: '72mm',
                   maxWidth: '100%',
@@ -720,6 +726,7 @@ export default function InvoiceSettings() {
               invoice={sampleInvoice} 
               onClose={() => setShowTestPrint(false)} 
               autoPrint={true} 
+              settings={form}
             />
           </div>
         </div>

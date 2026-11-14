@@ -3,14 +3,7 @@ import { fmt } from './ui'
 import { api } from '../lib/api'
 
 const getInitialSettings = () => {
-  try {
-    const cached = localStorage.getItem('invoice_settings_cache')
-    if (cached) {
-      const parsed = JSON.parse(cached)
-      if (parsed && typeof parsed === 'object') return parsed
-    }
-  } catch (e) {}
-  return {
+  const fallback = {
     store_name: 'Harmain Medical Store',
     address: 'Opposite Nadra Kiosik Main Bazar Raiwind',
     phone: '03228684603',
@@ -24,16 +17,71 @@ const getInitialSettings = () => {
     footer_terms: 'LOOSE ITEMS, VACCINES, INHALERS AND\nFRIDGE ITEMS WILL NOT BE RETURNED.',
     thank_you_msg: 'Thank You For Your Visit!'
   }
+  try {
+    const cached = localStorage.getItem('invoice_settings_cache')
+    if (cached) {
+      const parsed = JSON.parse(cached)
+      if (parsed && typeof parsed === 'object') {
+        return {
+          ...fallback,
+          ...parsed,
+          header_font_size: Number(parsed.header_font_size) >= 16 ? Number(parsed.header_font_size) : 19,
+          address_font_size: Number(parsed.address_font_size) >= 12 ? Number(parsed.address_font_size) : 13.5,
+          meta_font_size: Number(parsed.meta_font_size) >= 12 ? Number(parsed.meta_font_size) : 12.5,
+          item_font_size: Number(parsed.item_font_size) >= 12 ? Number(parsed.item_font_size) : 12.5,
+          total_font_size: Number(parsed.total_font_size) >= 12 ? Number(parsed.total_font_size) : 13,
+          net_total_font_size: Number(parsed.net_total_font_size) >= 14 ? Number(parsed.net_total_font_size) : 16,
+          footer_font_size: Number(parsed.footer_font_size) >= 9.5 ? Number(parsed.footer_font_size) : 10
+        }
+      }
+    }
+  } catch (e) {}
+  return fallback
 }
 
 // Thermal Receipt Print Component (80mm) - Exact match to user desired layout
-export default function InvoicePrint({ invoice, onClose, autoPrint = false }) {
+export default function InvoicePrint({ invoice, onClose, autoPrint = false, settings: propSettings }) {
   const printButtonRef = useRef(null)
   const closeButtonRef = useRef(null)
   const hasAutoPrinted = useRef(false)
-  const [settings, setSettings] = useState(getInitialSettings)
+  
+  const [settings, setSettings] = useState(() => {
+    const base = getInitialSettings()
+    if (propSettings && typeof propSettings === 'object' && Object.keys(propSettings).length > 0) {
+      return {
+        ...base,
+        ...propSettings,
+        header_font_size: Number(propSettings.header_font_size) || base.header_font_size,
+        address_font_size: Number(propSettings.address_font_size) || base.address_font_size,
+        meta_font_size: Number(propSettings.meta_font_size) || base.meta_font_size,
+        item_font_size: Number(propSettings.item_font_size) || base.item_font_size,
+        total_font_size: Number(propSettings.total_font_size) || base.total_font_size,
+        net_total_font_size: Number(propSettings.net_total_font_size) || base.net_total_font_size,
+        footer_font_size: Number(propSettings.footer_font_size) || base.footer_font_size
+      }
+    }
+    return base
+  })
+  
+  const [readyToPrint, setReadyToPrint] = useState(() => Boolean(propSettings))
 
   useEffect(() => {
+    if (propSettings && typeof propSettings === 'object' && Object.keys(propSettings).length > 0) {
+      setSettings(prev => ({
+        ...prev,
+        ...propSettings,
+        header_font_size: Number(propSettings.header_font_size) || prev.header_font_size || 19,
+        address_font_size: Number(propSettings.address_font_size) || prev.address_font_size || 13.5,
+        meta_font_size: Number(propSettings.meta_font_size) || prev.meta_font_size || 12.5,
+        item_font_size: Number(propSettings.item_font_size) || prev.item_font_size || 12.5,
+        total_font_size: Number(propSettings.total_font_size) || prev.total_font_size || 13,
+        net_total_font_size: Number(propSettings.net_total_font_size) || prev.net_total_font_size || 16,
+        footer_font_size: Number(propSettings.footer_font_size) || prev.footer_font_size || 10
+      }))
+      setReadyToPrint(true)
+      return
+    }
+
     api.settings.getInvoiceSettings().then(s => {
       if (s) {
         setSettings(prev => {
@@ -42,13 +90,13 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false }) {
             store_name: s.store_name || prev.store_name,
             address: s.address || prev.address,
             phone: s.phone || prev.phone,
-            header_font_size: Number(s.header_font_size) || prev.header_font_size,
-            address_font_size: Number(s.address_font_size) || prev.address_font_size,
-            meta_font_size: Number(s.meta_font_size) || prev.meta_font_size,
-            item_font_size: Number(s.item_font_size) || prev.item_font_size,
-            total_font_size: Number(s.total_font_size) || prev.total_font_size,
-            net_total_font_size: Number(s.net_total_font_size) || prev.net_total_font_size,
-            footer_font_size: Number(s.footer_font_size) || prev.footer_font_size,
+            header_font_size: Number(s.header_font_size) || prev.header_font_size || 19,
+            address_font_size: Number(s.address_font_size) || prev.address_font_size || 13.5,
+            meta_font_size: Number(s.meta_font_size) || prev.meta_font_size || 12.5,
+            item_font_size: Number(s.item_font_size) || prev.item_font_size || 12.5,
+            total_font_size: Number(s.total_font_size) || prev.total_font_size || 13,
+            net_total_font_size: Number(s.net_total_font_size) || prev.net_total_font_size || 16,
+            footer_font_size: Number(s.footer_font_size) || prev.footer_font_size || 10,
             footer_terms: s.footer_terms || prev.footer_terms,
             thank_you_msg: s.thank_you_msg || prev.thank_you_msg
           }
@@ -56,13 +104,16 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false }) {
           return merged
         })
       }
-    }).catch(() => {})
-  }, [])
+      setReadyToPrint(true)
+    }).catch(() => {
+      setReadyToPrint(true)
+    })
+  }, [propSettings])
 
   // Auto-print on mount if autoPrint is true (for Ctrl+P)
   useEffect(() => {
-    if (autoPrint && !hasAutoPrinted.current) {
-      console.log('🖨️ Opening print dialog...')
+    if (autoPrint && readyToPrint && !hasAutoPrinted.current) {
+      console.log('Opening print dialog...')
       hasAutoPrinted.current = true
       
       // Open browser print dialog with receipt loaded
@@ -74,7 +125,7 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false }) {
     } else if (!autoPrint) {
       printButtonRef.current?.focus()
     }
-  }, [autoPrint, onClose])
+  }, [autoPrint, readyToPrint, onClose])
 
   // Keyboard navigation for buttons
   useEffect(() => {

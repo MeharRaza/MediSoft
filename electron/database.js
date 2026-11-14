@@ -286,19 +286,23 @@ function runMigrations() {
     // Migration 12: Exact match to user desired receipt format
     const invoiceSettingsTable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='invoice_settings'").get()
     if (invoiceSettingsTable) {
+      try {
+        db.prepare("ALTER TABLE invoice_settings ADD COLUMN net_total_font_size REAL DEFAULT 16").run()
+      } catch (e) {}
       db.prepare(`
         UPDATE invoice_settings 
         SET store_name = 'Harmain Medical Store',
             address = 'Opposite Nadra Kiosik Main Bazar Raiwind',
             phone = '03228684603',
             paper_width = '80mm',
-            header_font_size = 16,
-            address_font_size = 13,
-            meta_font_size = 11,
-            item_font_size = 11,
+            header_font_size = 19,
+            address_font_size = 13.5,
+            meta_font_size = 12.5,
+            item_font_size = 12.5,
             total_font_size = 13,
-            footer_font_size = 9
-        WHERE id = 1
+            net_total_font_size = 16,
+            footer_font_size = 10
+        WHERE id = 1 AND (header_font_size < 18 OR header_font_size = 16)
       `).run()
       console.log('✅ invoice_settings updated to exact user format')
     }
@@ -333,18 +337,19 @@ CREATE TABLE IF NOT EXISTS invoice_settings (
   id INTEGER PRIMARY KEY DEFAULT 1,
   store_name TEXT DEFAULT 'Harmain Medical Store',
   tagline TEXT DEFAULT '',
-  address TEXT DEFAULT 'Opposite Nadra Kiosk Main Bazar Raiwind',
+  address TEXT DEFAULT 'Opposite Nadra Kiosik Main Bazar Raiwind',
   phone TEXT DEFAULT '03228684603',
   paper_width TEXT DEFAULT '80mm',
-  header_font_size REAL DEFAULT 16,
-  address_font_size REAL DEFAULT 11,
-  meta_font_size REAL DEFAULT 10.5,
-  item_font_size REAL DEFAULT 11,
-  total_font_size REAL DEFAULT 11,
-  footer_font_size REAL DEFAULT 9.5,
+  header_font_size REAL DEFAULT 19,
+  address_font_size REAL DEFAULT 13.5,
+  meta_font_size REAL DEFAULT 12.5,
+  item_font_size REAL DEFAULT 12.5,
+  total_font_size REAL DEFAULT 13,
+  net_total_font_size REAL DEFAULT 16,
+  footer_font_size REAL DEFAULT 10,
   footer_terms TEXT DEFAULT 'LOOSE ITEMS, VACCINES, INHALERS AND FRIDGE ITEMS WILL NOT BE RETURNED.',
   thank_you_msg TEXT DEFAULT 'Thank You For Your Visit!',
-  show_discount_col INTEGER DEFAULT 1,
+  show_discount_col INTEGER DEFAULT 0,
   show_customer_name INTEGER DEFAULT 1,
   updated_at TEXT DEFAULT (datetime('now', 'localtime'))
 );

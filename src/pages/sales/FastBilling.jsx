@@ -722,23 +722,21 @@ export default function FastBilling() {
   const grandTotal = subTotal - totalDiscAmt
   const change    = (parseFloat(paidAmount) || 0) - grandTotal
   
-  // Calculate total profit using profit_percent from purchase entry (includes bonus/discount)
+  // Calculate total profit using effective cost and item-level revenue
   const totalProfit = items.reduce((sum, item) => {
-    // Use profit_percent from purchase_items (correctly accounts for bonus, discount)
-    // profit_percent is margin-based: (sale - effectiveCost) / sale * 100
-    if (item.profit_percent && item.profit_percent !== 0) {
-      // Profit = sale_price × profit_percent% × qty
-      const profitPerPill = (item.sale_price || 0) * (item.profit_percent / 100)
-      return sum + profitPerPill * item.qty
-    }
-    // Fallback: use purchase_price if no profit_percent
-    const costPrice = (item.purchase_price || 0) * item.qty
-    const sellingPrice = item.total
-    return sum + (sellingPrice - costPrice)
+    // Effective cost per unit (per pill/piece)
+    const unitCost = (item.purchase_price !== undefined && item.purchase_price !== null && item.purchase_price !== '')
+      ? parseFloat(item.purchase_price) || 0
+      : (item.profit_percent ? ((parseFloat(item.sale_price) || 0) * (1 - (parseFloat(item.profit_percent) || 0) / 100)) : 0)
+    const costTotal = unitCost * (parseFloat(item.qty) || 0)
+    
+    // Selling revenue for this item after item-level discount
+    const itemRevenue = parseFloat(item.total) || ((parseFloat(item.qty) || 0) * (parseFloat(item.sale_price) || 0) * (1 - (parseFloat(item.discount_percent) || 0) / 100))
+    return sum + (itemRevenue - costTotal)
   }, 0)
   
-  // Profit after global discounts
-  const finalProfit = totalProfit - totalDiscAmt
+  // Final Net Profit after invoice-level discount (percentage + flat)
+  const finalProfit = totalProfit - (parseFloat(totalDiscAmt) || 0)
 
   const handleFinishSale = useCallback(async () => {
     if (items.length === 0) return

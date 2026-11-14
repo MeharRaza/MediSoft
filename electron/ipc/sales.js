@@ -75,10 +75,14 @@ module.exports = (ipcMain) => {
           qtyNeeded = 0
         }
 
-        // If no batches found at all, fall back to frontend-provided batch
-        if (batchSplits.length === 0 && item.purchase_item_id) {
-          const batch = db.prepare('SELECT expiry_date FROM purchase_items WHERE id=?').get(item.purchase_item_id)
-          batchSplits.push({ purchase_item_id: item.purchase_item_id, qty: parseFloat(item.qty), expiry_date: batch?.expiry_date || null })
+        // If no batches found at all, ensure item is still recorded (fall back to batch or product default)
+        if (batchSplits.length === 0) {
+          let exp = item.expiry_date || null
+          if (item.purchase_item_id) {
+            const batch = db.prepare('SELECT expiry_date FROM purchase_items WHERE id=?').get(item.purchase_item_id)
+            if (batch?.expiry_date) exp = batch.expiry_date
+          }
+          batchSplits.push({ purchase_item_id: item.purchase_item_id || null, qty: parseFloat(item.qty), expiry_date: exp })
         }
 
         console.log(`   FIFO splits for ${item.qty} qty:`, batchSplits)
@@ -97,11 +101,12 @@ module.exports = (ipcMain) => {
             (item.total / parseFloat(item.qty)) * split.qty
           )
 
-          // Update qty_sold for this batch
-          db.prepare('UPDATE purchase_items SET qty_sold = qty_sold + ? WHERE id=?')
-            .run(split.qty, split.purchase_item_id)
-
-          console.log(`   ✅ Split: Batch ${split.purchase_item_id} → qty ${split.qty}, qty_sold updated`)
+          // Update qty_sold for this batch if valid batch exists
+          if (split.purchase_item_id) {
+            db.prepare('UPDATE purchase_items SET qty_sold = qty_sold + ? WHERE id=?')
+              .run(split.qty, split.purchase_item_id)
+            console.log(`   ✅ Split: Batch ${split.purchase_item_id} → qty ${split.qty}, qty_sold updated`)
+          }
         }
       }
 
@@ -512,14 +517,19 @@ module.exports = (ipcMain) => {
         COALESCE(
           SUM(
             -- Actual revenue for this item after all discounts
-            ((si.total / NULLIF(s.sub_total, 0)) * s.grand_total)
-            -- Minus cost price
-            - ((pi.purchase_price / CASE WHEN pi.pcs_in_pack IS NULL OR pi.pcs_in_pack = 0 THEN 1 ELSE pi.pcs_in_pack END) * si.qty)
+            COALESCE(((si.total / NULLIF(s.sub_total, 0)) * s.grand_total), si.total, 0)
+            -- Minus cost price (use purchase batch cost, or product trade_price fallback)
+            - (
+                (COALESCE(pi.purchase_price, p.trade_price, 0) / 
+                 CASE WHEN COALESCE(pi.pcs_in_pack, p.pcs_in_pack, 1) <= 0 THEN 1 ELSE COALESCE(pi.pcs_in_pack, p.pcs_in_pack, 1) END
+                ) * si.qty
+              )
           ),
           0
         ) as profit
       FROM sale_items si
       JOIN sales s ON s.id=si.sale_id
+      JOIN products p ON p.id=si.product_id
       LEFT JOIN purchase_items pi ON pi.id=si.purchase_item_id
       WHERE date(s.created_at)=? AND s.status!='voided'`).get(today).profit
     
@@ -531,14 +541,19 @@ module.exports = (ipcMain) => {
           SUM(
             -- Use actual return total from sale_returns (has discount applied)
             -- Distribute it proportionally to items
-            ((sri.qty * sri.price) / NULLIF((SELECT SUM(qty * price) FROM sale_return_items WHERE return_id = sri.return_id), 0)) * sr.total
+            COALESCE(((sri.qty * sri.price) / NULLIF((SELECT SUM(qty * price) FROM sale_return_items WHERE return_id = sri.return_id), 0)) * sr.total, sri.qty * sri.price, 0)
             -- Minus cost price of returned items
-            - ((pi.purchase_price / CASE WHEN pi.pcs_in_pack IS NULL OR pi.pcs_in_pack = 0 THEN 1 ELSE pi.pcs_in_pack END) * sri.qty)
+            - (
+                (COALESCE(pi.purchase_price, p.trade_price, 0) / 
+                 CASE WHEN COALESCE(pi.pcs_in_pack, p.pcs_in_pack, 1) <= 0 THEN 1 ELSE COALESCE(pi.pcs_in_pack, p.pcs_in_pack, 1) END
+                ) * sri.qty
+              )
           ),
           0
         ) as profit
       FROM sale_return_items sri
       JOIN sale_returns sr ON sr.id=sri.return_id
+      JOIN products p ON p.id=sri.product_id
       LEFT JOIN purchase_items pi ON pi.id=sri.purchase_item_id
       WHERE date(sr.created_at)=?`).get(today).profit
     

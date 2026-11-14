@@ -150,13 +150,14 @@ module.exports = (ipcMain) => {
     // Calculate actual COGS from sold items
     const actualCOGS = db.prepare(`
       SELECT COALESCE(SUM(
-        CASE 
-          WHEN pi.qty > 0 THEN (si.qty * (pi.purchase_price / pi.pcs_in_pack))
-          ELSE 0 
-        END
+        si.qty * (
+          COALESCE(pi.purchase_price, p.trade_price, 0) / 
+          CASE WHEN COALESCE(pi.pcs_in_pack, p.pcs_in_pack, 1) <= 0 THEN 1 ELSE COALESCE(pi.pcs_in_pack, p.pcs_in_pack, 1) END
+        )
       ), 0) as t
       FROM sale_items si
       JOIN sales s ON s.id = si.sale_id
+      JOIN products p ON p.id = si.product_id
       LEFT JOIN purchase_items pi ON pi.id = si.purchase_item_id
       WHERE date(s.created_at) BETWEEN ? AND ? 
       AND s.status != 'voided'
@@ -165,13 +166,14 @@ module.exports = (ipcMain) => {
     // Calculate COGS of returned items (reduce actual COGS)
     const returnedCOGS = db.prepare(`
       SELECT COALESCE(SUM(
-        CASE 
-          WHEN pi.qty > 0 THEN (sri.qty * (pi.purchase_price / pi.pcs_in_pack))
-          ELSE 0 
-        END
+        sri.qty * (
+          COALESCE(pi.purchase_price, p.trade_price, 0) / 
+          CASE WHEN COALESCE(pi.pcs_in_pack, p.pcs_in_pack, 1) <= 0 THEN 1 ELSE COALESCE(pi.pcs_in_pack, p.pcs_in_pack, 1) END
+        )
       ), 0) as t
       FROM sale_return_items sri
       JOIN sale_returns sr ON sr.id = sri.return_id
+      JOIN products p ON p.id = sri.product_id
       LEFT JOIN purchase_items pi ON pi.id = sri.purchase_item_id
       WHERE date(sr.created_at) BETWEEN ? AND ?
     `).get(from, to).t

@@ -564,7 +564,7 @@ export default function InvoiceSettings() {
                 <div 
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: '46% 14% 18% 22%',
+                    gridTemplateColumns: form.show_discount_col ? '38% 12% 16% 16% 18%' : '48% 14% 18% 20%',
                     fontSize: `${(Number(form.item_font_size) || 12.5) + 0.5}px`,
                     fontWeight: 'bold',
                     marginBottom: '3px',
@@ -574,6 +574,7 @@ export default function InvoiceSettings() {
                   <div>Item Name</div>
                   <div style={{ textAlign: 'right' }}>Qty</div>
                   <div style={{ textAlign: 'right' }}>Price</div>
+                  {Boolean(form.show_discount_col) && <div style={{ textAlign: 'right' }}>Disc</div>}
                   <div style={{ textAlign: 'right' }}>Total</div>
                 </div>
 
@@ -583,7 +584,7 @@ export default function InvoiceSettings() {
                   <div 
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: '46% 14% 18% 22%',
+                      gridTemplateColumns: form.show_discount_col ? '38% 12% 16% 16% 18%' : '48% 14% 18% 20%',
                       marginBottom: '3px',
                       lineHeight: 1.3
                     }}
@@ -591,6 +592,7 @@ export default function InvoiceSettings() {
                     <div style={{ wordBreak: 'break-word', paddingRight: '2px', fontWeight: '500' }}>OMEGA 20MG CAP</div>
                     <div style={{ textAlign: 'right' }}>3</div>
                     <div style={{ textAlign: 'right' }}>27.86</div>
+                    {Boolean(form.show_discount_col) && <div style={{ textAlign: 'right' }}>-</div>}
                     <div style={{ textAlign: 'right', fontWeight: 'bold' }}>83.57</div>
                   </div>
 
@@ -598,7 +600,7 @@ export default function InvoiceSettings() {
                   <div 
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: '46% 14% 18% 22%',
+                      gridTemplateColumns: form.show_discount_col ? '38% 12% 16% 16% 18%' : '48% 14% 18% 20%',
                       marginBottom: '3px',
                       lineHeight: 1.3
                     }}
@@ -606,6 +608,7 @@ export default function InvoiceSettings() {
                     <div style={{ wordBreak: 'break-word', paddingRight: '2px', fontWeight: '500' }}>KESTINE 10MG TAB</div>
                     <div style={{ textAlign: 'right' }}>3</div>
                     <div style={{ textAlign: 'right' }}>21.24</div>
+                    {Boolean(form.show_discount_col) && <div style={{ textAlign: 'right' }}>-</div>}
                     <div style={{ textAlign: 'right', fontWeight: 'bold' }}>63.71</div>
                   </div>
 
@@ -613,7 +616,7 @@ export default function InvoiceSettings() {
                   <div 
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: '46% 14% 18% 22%',
+                      gridTemplateColumns: form.show_discount_col ? '38% 12% 16% 16% 18%' : '48% 14% 18% 20%',
                       marginBottom: '3px',
                       lineHeight: 1.3
                     }}
@@ -621,6 +624,7 @@ export default function InvoiceSettings() {
                     <div style={{ wordBreak: 'break-word', paddingRight: '2px', fontWeight: '500' }}>MYTEKA 10MG TAB</div>
                     <div style={{ textAlign: 'right' }}>3</div>
                     <div style={{ textAlign: 'right' }}>39.57</div>
+                    {Boolean(form.show_discount_col) && <div style={{ textAlign: 'right' }}>-</div>}
                     <div style={{ textAlign: 'right', fontWeight: 'bold' }}>118.71</div>
                   </div>
 
@@ -628,7 +632,7 @@ export default function InvoiceSettings() {
                   <div 
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: '46% 14% 18% 22%',
+                      gridTemplateColumns: form.show_discount_col ? '38% 12% 16% 16% 18%' : '48% 14% 18% 20%',
                       marginBottom: '3px',
                       lineHeight: 1.3
                     }}
@@ -636,6 +640,7 @@ export default function InvoiceSettings() {
                     <div style={{ wordBreak: 'break-word', paddingRight: '2px', fontWeight: '500' }}>DR KOFF CANDY(RS#10)</div>
                     <div style={{ textAlign: 'right' }}>10</div>
                     <div style={{ textAlign: 'right' }}>10.00</div>
+                    {Boolean(form.show_discount_col) && <div style={{ textAlign: 'right' }}>-</div>}
                     <div style={{ textAlign: 'right', fontWeight: 'bold' }}>100.00</div>
                   </div>
 
@@ -643,7 +648,7 @@ export default function InvoiceSettings() {
                   <div 
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: '46% 14% 18% 22%',
+                      gridTemplateColumns: form.show_discount_col ? '38% 12% 16% 16% 18%' : '48% 14% 18% 20%',
                       marginBottom: '3px',
                       lineHeight: 1.3
                     }}
@@ -651,6 +656,7 @@ export default function InvoiceSettings() {
                     <div style={{ wordBreak: 'break-word', paddingRight: '2px', fontWeight: '500' }}>GOURMET 1.5 LTR (LEMON)</div>
                     <div style={{ textAlign: 'right' }}>1</div>
                     <div style={{ textAlign: 'right' }}>160.00</div>
+                    {Boolean(form.show_discount_col) && <div style={{ textAlign: 'right' }}>-</div>}
                     <div style={{ textAlign: 'right', fontWeight: 'bold' }}>160.00</div>
                   </div>
                 </div>

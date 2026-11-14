@@ -706,12 +706,13 @@ export default function FastBilling() {
 
   const removeItem = (idx) => setItems(items.filter((_, i) => i !== idx))
 
+  const grossTotal = items.reduce((s, i) => s + (parseFloat(i.qty) || 0) * (parseFloat(i.sale_price) || 0), 0)
   const subTotal  = items.reduce((s, i) => s + i.total, 0)
   
   // Calculate per-item discounts total
   const perItemDiscAmt = items.reduce((sum, item) => {
-    const itemBase = item.qty * item.sale_price
-    const itemDisc = itemBase * (item.discount_percent / 100)
+    const itemBase = (parseFloat(item.qty) || 0) * (parseFloat(item.sale_price) || 0)
+    const itemDisc = itemBase * ((parseFloat(item.discount_percent) || 0) / 100)
     return sum + itemDisc
   }, 0)
   
@@ -767,8 +768,8 @@ export default function FastBilling() {
         customer_id: selectedCustomer?.id || null,
         customer_name: selectedCustomer ? selectedCustomer.name : (customerSearch.trim() || null),
         payment_method: paymentMethod,
-        sub_total: subTotal,
-        discount: totalDiscAmt,
+        sub_total: grossTotal,
+        discount: grandTotalDiscount,
         tax: 0,
         grand_total: grandTotal,
         paid_amount: parseFloat(paidAmount) || (paymentMethod === 'cash' ? grandTotal : 0),
@@ -811,7 +812,7 @@ export default function FastBilling() {
       alert('Error: ' + e.message)
       setSaving(false)
     }
-  }, [items, selectedCustomer, paymentMethod, subTotal, totalDiscAmt, grandTotal, paidAmount, change, currentBillIndex, heldBills])
+  }, [items, selectedCustomer, paymentMethod, subTotal, grossTotal, totalDiscAmt, grandTotalDiscount, grandTotal, paidAmount, change, currentBillIndex, heldBills])
   
   // Save and Print - for Ctrl+P
   const handleFinishSaleWithPrint = useCallback(async () => {
@@ -844,8 +845,8 @@ export default function FastBilling() {
         customer_id: selectedCustomer?.id || null,
         customer_name: selectedCustomer ? selectedCustomer.name : (customerSearch.trim() || null),
         payment_method: paymentMethod,
-        sub_total: subTotal,
-        discount: totalDiscAmt,
+        sub_total: grossTotal,
+        discount: grandTotalDiscount,
         tax: 0,
         grand_total: grandTotal,
         paid_amount: parseFloat(paidAmount) || (paymentMethod === 'cash' ? grandTotal : 0),
@@ -893,7 +894,7 @@ export default function FastBilling() {
       alert('Error: ' + e.message)
       setSaving(false)
     }
-  }, [items, selectedCustomer, paymentMethod, subTotal, totalDiscAmt, grandTotal, paidAmount, change, currentBillIndex, heldBills])
+  }, [items, selectedCustomer, paymentMethod, subTotal, grossTotal, totalDiscAmt, grandTotalDiscount, grandTotal, paidAmount, change, currentBillIndex, heldBills])
   
   // Hold current bill and start new one
   const handleHoldBill = useCallback(() => {

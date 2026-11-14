@@ -167,11 +167,54 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false, sett
     if (existing) {
       existing.qty += item.qty
       existing.total += item.total
+      if (item.discount_percent) existing.discount_percent = item.discount_percent
     } else {
       acc.push({ ...item })
     }
     return acc
   }, []) || []
+
+  // Compute base price and per-item PKR discount amount
+  let totalCalculatedItemDisc = 0
+  const processedItems = groupedItems.map(item => {
+    const qty = Number(item.qty) || 0
+    const price = Number(item.sale_price) || 0
+    const base = qty * price
+    const total = Number(item.total) || 0
+    
+    let discAmt = 0
+    if (item.discount_percent && Number(item.discount_percent) > 0) {
+      discAmt = base * (Number(item.discount_percent) / 100)
+    } else {
+      const diff = base - total
+      if (diff > 0.05) {
+        discAmt = diff
+      }
+    }
+    totalCalculatedItemDisc += discAmt
+    return {
+      ...item,
+      base,
+      discAmt
+    }
+  })
+
+  const hasItemDiscount = processedItems.some(i => i.discAmt > 0.01)
+  const showDiscountCol = Boolean(settings.show_discount_col || hasItemDiscount)
+
+  // Totals calculations
+  const computedGross = processedItems.reduce((sum, i) => sum + i.base, 0)
+  const rawInvoiceSubTotal = Number(invoice.sub_total) || 0
+  const rawInvoiceDiscount = Number(invoice.discount) || 0
+  const rawGrandTotal = Number(invoice.grand_total) || 0
+
+  const displayGross = computedGross > 0 ? computedGross : Math.max(rawInvoiceSubTotal, rawGrandTotal + rawInvoiceDiscount)
+  const totalDiscAmt = Math.max(
+    rawInvoiceDiscount,
+    totalCalculatedItemDisc,
+    Math.max(0, displayGross - rawGrandTotal)
+  )
+  const displayNet = rawGrandTotal > 0 ? rawGrandTotal : Math.max(0, displayGross - totalDiscAmt)
 
   const date = new Date(invoice.created_at)
   const dateStr = date.toLocaleDateString('en-PK', { day: '2-digit', month: '2-digit', year: 'numeric' })
@@ -204,10 +247,10 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false, sett
       
       <div className="line"></div>
       
-      {/* Items Header - Grid Layout (4 columns matching exact desired layout) */}
+      {/* Items Header - Grid Layout (Adaptive: 5 cols when discount exists, 4 cols otherwise) */}
       <div style={{ 
         display: 'grid',
-        gridTemplateColumns: '48% 14% 18% 20%',
+        gridTemplateColumns: showDiscountCol ? '38% 12% 16% 16% 18%' : '48% 14% 18% 20%',
         fontSize: `${(Number(settings.item_font_size) || 12.5) + 0.5}px`,
         marginBottom: '3px',
         fontWeight: 'bold',
@@ -216,14 +259,15 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false, sett
         <div>Item Name</div>
         <div style={{ textAlign: 'right' }}>Qty</div>
         <div style={{ textAlign: 'right' }}>Price</div>
+        {showDiscountCol && <div style={{ textAlign: 'right' }}>Disc</div>}
         <div style={{ textAlign: 'right' }}>Total</div>
       </div>
       
       {/* Items - Single Row per Item (Merged by product name) */}
-      {groupedItems.map((item, idx) => (
+      {processedItems.map((item, idx) => (
         <div key={idx} style={{ 
           display: 'grid',
-          gridTemplateColumns: '48% 14% 18% 20%',
+          gridTemplateColumns: showDiscountCol ? '38% 12% 16% 16% 18%' : '48% 14% 18% 20%',
           fontSize: `${settings.item_font_size || 12.5}px`,
           marginBottom: '3px',
           lineHeight: 1.3
@@ -231,6 +275,11 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false, sett
           <div style={{ wordBreak: 'break-word', paddingRight: '2px', fontWeight: '500' }}>{item.product_name}</div>
           <div style={{ textAlign: 'right' }}>{item.qty}</div>
           <div style={{ textAlign: 'right' }}>{fmt(item.sale_price)}</div>
+          {showDiscountCol && (
+            <div style={{ textAlign: 'right' }}>
+              {item.discAmt > 0.01 ? fmt(item.discAmt) : '-'}
+            </div>
+          )}
           <div style={{ textAlign: 'right', fontWeight: 'bold' }}>{fmt(item.total)}</div>
         </div>
       ))}
@@ -240,13 +289,13 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false, sett
       {/* Totals - Labels centered, values right-aligned */}
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: `${settings.total_font_size || 13}px`, margin: '2px 0' }}>
         <span style={{ flex: 1, textAlign: 'center' }}>Gross Total:</span>
-        <span style={{ textAlign: 'right', minWidth: '85px', fontWeight: 'bold' }}>{fmt(invoice.sub_total)}</span>
+        <span style={{ textAlign: 'right', minWidth: '85px', fontWeight: 'bold' }}>{fmt(displayGross)}</span>
       </div>
       
-      {invoice.discount > 0 && (
+      {totalDiscAmt > 0.01 && (
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: `${settings.total_font_size || 13}px`, margin: '2px 0' }}>
           <span style={{ flex: 1, textAlign: 'center' }}>Discount:</span>
-          <span style={{ textAlign: 'right', minWidth: '85px', fontWeight: 'bold' }}>{fmt(invoice.discount)}</span>
+          <span style={{ textAlign: 'right', minWidth: '85px', fontWeight: 'bold' }}>{fmt(totalDiscAmt)}</span>
         </div>
       )}
       
@@ -254,7 +303,7 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false, sett
       
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: `${settings.net_total_font_size || 16}px`, fontWeight: 'bold', margin: '3px 0' }}>
         <span style={{ flex: 1, textAlign: 'center' }}>Net Total</span>
-        <span style={{ textAlign: 'right', minWidth: '90px' }}>{fmt(invoice.grand_total)}</span>
+        <span style={{ textAlign: 'right', minWidth: '90px' }}>{fmt(displayNet)}</span>
       </div>
       
       <div className="line"></div>

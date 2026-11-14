@@ -2,12 +2,15 @@ import React, { useEffect, useRef, useState } from 'react'
 import { fmt } from './ui'
 import { api } from '../lib/api'
 
-// Thermal Receipt Print Component (80mm) - Exact match to user desired layout
-export default function InvoicePrint({ invoice, onClose, autoPrint = false }) {
-  const printButtonRef = useRef(null)
-  const closeButtonRef = useRef(null)
-  const hasAutoPrinted = useRef(false)
-  const [settings, setSettings] = useState({
+const getInitialSettings = () => {
+  try {
+    const cached = localStorage.getItem('invoice_settings_cache')
+    if (cached) {
+      const parsed = JSON.parse(cached)
+      if (parsed && typeof parsed === 'object') return parsed
+    }
+  } catch (e) {}
+  return {
     store_name: 'Harmain Medical Store',
     address: 'Opposite Nadra Kiosik Main Bazar Raiwind',
     phone: '03228684603',
@@ -20,26 +23,38 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false }) {
     footer_font_size: 10,
     footer_terms: 'LOOSE ITEMS, VACCINES, INHALERS AND\nFRIDGE ITEMS WILL NOT BE RETURNED.',
     thank_you_msg: 'Thank You For Your Visit!'
-  })
+  }
+}
+
+// Thermal Receipt Print Component (80mm) - Exact match to user desired layout
+export default function InvoicePrint({ invoice, onClose, autoPrint = false }) {
+  const printButtonRef = useRef(null)
+  const closeButtonRef = useRef(null)
+  const hasAutoPrinted = useRef(false)
+  const [settings, setSettings] = useState(getInitialSettings)
 
   useEffect(() => {
     api.settings.getInvoiceSettings().then(s => {
       if (s) {
-        setSettings(prev => ({
-          ...prev,
-          store_name: s.store_name || prev.store_name,
-          address: s.address || prev.address,
-          phone: s.phone || prev.phone,
-          header_font_size: Number(s.header_font_size) || prev.header_font_size,
-          address_font_size: Number(s.address_font_size) || prev.address_font_size,
-          meta_font_size: Number(s.meta_font_size) || prev.meta_font_size,
-          item_font_size: Number(s.item_font_size) || prev.item_font_size,
-          total_font_size: Number(s.total_font_size) || prev.total_font_size,
-          net_total_font_size: Number(s.net_total_font_size) || prev.net_total_font_size,
-          footer_font_size: Number(s.footer_font_size) || prev.footer_font_size,
-          footer_terms: s.footer_terms || prev.footer_terms,
-          thank_you_msg: s.thank_you_msg || prev.thank_you_msg
-        }))
+        setSettings(prev => {
+          const merged = {
+            ...prev,
+            store_name: s.store_name || prev.store_name,
+            address: s.address || prev.address,
+            phone: s.phone || prev.phone,
+            header_font_size: Number(s.header_font_size) || prev.header_font_size,
+            address_font_size: Number(s.address_font_size) || prev.address_font_size,
+            meta_font_size: Number(s.meta_font_size) || prev.meta_font_size,
+            item_font_size: Number(s.item_font_size) || prev.item_font_size,
+            total_font_size: Number(s.total_font_size) || prev.total_font_size,
+            net_total_font_size: Number(s.net_total_font_size) || prev.net_total_font_size,
+            footer_font_size: Number(s.footer_font_size) || prev.footer_font_size,
+            footer_terms: s.footer_terms || prev.footer_terms,
+            thank_you_msg: s.thank_you_msg || prev.thank_you_msg
+          }
+          try { localStorage.setItem('invoice_settings_cache', JSON.stringify(merged)) } catch (e) {}
+          return merged
+        })
       }
     }).catch(() => {})
   }, [])
@@ -51,10 +66,11 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false }) {
       hasAutoPrinted.current = true
       
       // Open browser print dialog with receipt loaded
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         window.print()
-        setTimeout(() => onClose(), 1000)
-      }, 300)
+        setTimeout(() => onClose(), 800)
+      }, 350)
+      return () => clearTimeout(timer)
     } else if (!autoPrint) {
       printButtonRef.current?.focus()
     }
@@ -125,13 +141,15 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false }) {
       <style>{`
         @media print {
           @page {
+            size: 80mm auto;
             margin: 0;
           }
           
           html, body {
             margin: 0 !important;
             padding: 0 !important;
-            width: 100% !important;
+            width: 80mm !important;
+            height: auto !important;
             background: #ffffff !important;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
@@ -141,35 +159,19 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false }) {
             visibility: hidden;
           }
           
-          .invoice-modal-backdrop,
-          .invoice-modal-container {
-            position: static !important;
-            display: block !important;
-            width: 100% !important;
-            max-width: 100% !important;
-            height: auto !important;
-            max-height: none !important;
-            overflow: visible !important;
-            background: transparent !important;
-            box-shadow: none !important;
-            border: none !important;
-            padding: 0 !important;
-            margin: 0 !important;
-          }
-          
           #thermal-receipt, #thermal-receipt * {
             visibility: visible;
           }
           
           #thermal-receipt {
-            position: absolute !important;
-            left: 50% !important;
+            position: fixed !important;
             top: 0 !important;
-            transform: translateX(-50%) !important;
-            width: 72mm !important;
-            max-width: 72mm !important;
-            margin: 0 auto !important;
-            padding: 1.5mm 1mm 3mm 1mm !important;
+            left: 0 !important;
+            transform: none !important;
+            width: 100% !important;
+            max-width: 80mm !important;
+            margin: 0 !important;
+            padding: 1mm 2.5mm 3mm 2.5mm !important;
             box-sizing: border-box !important;
             box-shadow: none !important;
             border-radius: 0 !important;

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { api } from '../../lib/api'
 import { PageHeader, Card, Btn, Input } from '../../components/ui'
+import InvoicePrint from '../../components/InvoicePrint'
 
 export default function InvoiceSettings() {
   const [form, setForm] = useState({
@@ -25,6 +26,23 @@ export default function InvoiceSettings() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState(null)
+  const [showTestPrint, setShowTestPrint] = useState(false)
+
+  const sampleInvoice = {
+    invoice_no: 'INV-15666',
+    created_at: new Date().toISOString(),
+    customer_name: 'Walk-in Customer',
+    items: [
+      { product_name: 'OMEGA 20MG CAP', qty: 3, sale_price: 27.86, total: 83.57 },
+      { product_name: 'KESTINE 10MG TAB', qty: 3, sale_price: 21.24, total: 63.71 },
+      { product_name: 'MYTEKA 10MG TAB', qty: 3, sale_price: 39.57, total: 118.71 },
+      { product_name: 'DR KOFF CANDY(RS#10)', qty: 10, sale_price: 10.00, total: 100.00 },
+      { product_name: 'GOURMET 1.5 LTR (LEMON)', qty: 1, sale_price: 160.00, total: 160.00 }
+    ],
+    sub_total: 525.99,
+    discount: 26.30,
+    grand_total: 499.69
+  }
 
   useEffect(() => {
     api.settings.getInvoiceSettings().then(s => {
@@ -60,7 +78,11 @@ export default function InvoiceSettings() {
   }, [form])
 
   const handleChange = (field, val) => {
-    setForm(prev => ({ ...prev, [field]: val }))
+    setForm(prev => {
+      const next = { ...prev, [field]: val }
+      try { localStorage.setItem('invoice_settings_cache', JSON.stringify(next)) } catch (e) {}
+      return next
+    })
     setMsg(null)
   }
 
@@ -68,6 +90,7 @@ export default function InvoiceSettings() {
     setSaving(true)
     setMsg(null)
     try {
+      try { localStorage.setItem('invoice_settings_cache', JSON.stringify(form)) } catch (e) {}
       const res = await api.settings.saveInvoiceSettings(form)
       if (res && res.success !== false) {
         setMsg({ type: 'success', text: '✓ Invoice & Receipt settings saved successfully!' })
@@ -84,7 +107,7 @@ export default function InvoiceSettings() {
 
   const handleReset = () => {
     if (!confirm('Reset invoice settings to recommended standard values?')) return
-    setForm({
+    const defaults = {
       store_name: 'Harmain Medical Store',
       tagline: '',
       address: 'Opposite Nadra Kiosik Main Bazar Raiwind',
@@ -101,12 +124,15 @@ export default function InvoiceSettings() {
       thank_you_msg: 'Thank You For Your Visit!',
       show_discount_col: 0,
       show_customer_name: 1
-    })
+    }
+    setForm(defaults)
+    try { localStorage.setItem('invoice_settings_cache', JSON.stringify(defaults)) } catch (e) {}
     setMsg({ type: 'info', text: 'Reset to defaults. Click "Save Settings" to apply.' })
   }
 
   const handleTestPrint = () => {
-    window.print()
+    try { localStorage.setItem('invoice_settings_cache', JSON.stringify(form)) } catch (e) {}
+    setShowTestPrint(true)
   }
 
   return (
@@ -685,6 +711,19 @@ export default function InvoiceSettings() {
           </div>
         </div>
       </div>
+
+      {/* Actual Print Modal for Test Receipt */}
+      {showTestPrint && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center invoice-modal-backdrop">
+          <div className="bg-white rounded-lg shadow-2xl max-w-[420px] max-h-[90vh] overflow-auto invoice-modal-container">
+            <InvoicePrint 
+              invoice={sampleInvoice} 
+              onClose={() => setShowTestPrint(false)} 
+              autoPrint={true} 
+            />
+          </div>
+        </div>
+      )}
     </div>
   )
 }

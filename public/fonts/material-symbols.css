@@ -1,10 +1,16 @@
-/* Material Symbols Outlined - Local Fallback */
-/* This is a fallback when internet is not available */
+/* Material Symbols Outlined - Local Offline Bundle */
+@font-face {
+  font-family: 'Material Symbols Outlined';
+  font-style: normal;
+  font-weight: 100 700;
+  font-display: block;
+  src: url('./material-symbols-outlined.woff2') format('woff2');
+}
 
 .material-symbols-outlined {
-  font-family: 'Material Symbols Outlined Fallback', Arial, sans-serif;
-  font-weight: normal;
-  font-style: normal;
+  font-family: 'Material Symbols Outlined' !important;
+  font-weight: normal !important;
+  font-style: normal !important;
   font-size: 24px;
   line-height: 1;
   letter-spacing: normal;
@@ -13,26 +19,11 @@
   white-space: nowrap;
   word-wrap: normal;
   direction: ltr;
+  -webkit-font-feature-settings: 'liga';
+  font-feature-settings: 'liga';
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   -moz-osx-font-smoothing: grayscale;
-  font-feature-settings: 'liga';
-}
-
-/* Fallback: Show text if font doesn't load */
-.material-symbols-outlined::before {
-  content: '●';
-  font-family: Arial, sans-serif;
-}
-
-/* Icon mapping - show unicode symbols as fallback */
-.material-symbols-outlined {
-  /* If icon doesn't load, show bullet point */
-}
-
-/* Common icons used in app - text fallback */
-.material-symbols-outlined:empty::after {
-  content: '•';
-  font-family: Arial;
-  font-size: 16px;
+  vertical-align: middle;
+  user-select: none;
 }

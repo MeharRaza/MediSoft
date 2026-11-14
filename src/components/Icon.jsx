@@ -1,13 +1,13 @@
 /**
- * Icon Component - Replaces material-symbols-outlined with local SVG sprites
- * Works offline without Google Fonts dependency
+ * Icon Component - Local Offline Material Symbols & SVG Support
+ * Works 100% offline without any internet connection or external CDN
  */
 
 export default function Icon({ name, className = "", style = {} }) {
   return (
-    <svg className={`icon ${className}`} style={style} aria-hidden="true">
-      <use href={`/material-icons.svg#icon-${name}`} />
-    </svg>
+    <span className={`material-symbols-outlined ${className}`} style={style} aria-hidden="true">
+      {name}
+    </span>
   )
 }
 

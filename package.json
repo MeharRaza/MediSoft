@@ -1,7 +1,7 @@
 {
   "name": "medisoft-pro",
   "private": true,
-  "version": "1.5.2",
+  "version": "1.5.3",
   "description": "MediSoft Pro — Pharmacy Management System",
   "main": "electron/main.js",
   "scripts": {

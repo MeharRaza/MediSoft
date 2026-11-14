@@ -6,18 +6,19 @@ export default function InvoiceSettings() {
   const [form, setForm] = useState({
     store_name: 'Harmain Medical Store',
     tagline: '',
-    address: 'Opposite Nadra Kiosk Main Bazar Raiwind',
+    address: 'Opposite Nadra Kiosik Main Bazar Raiwind',
     phone: '03228684603',
     paper_width: '80mm',
-    header_font_size: 16,
-    address_font_size: 11,
-    meta_font_size: 10.5,
-    item_font_size: 11,
-    total_font_size: 11,
-    footer_font_size: 9.5,
+    header_font_size: 19,
+    address_font_size: 13.5,
+    meta_font_size: 12.5,
+    item_font_size: 12.5,
+    total_font_size: 13,
+    net_total_font_size: 16,
+    footer_font_size: 10,
     footer_terms: 'LOOSE ITEMS, VACCINES, INHALERS AND\nFRIDGE ITEMS WILL NOT BE RETURNED.',
     thank_you_msg: 'Thank You For Your Visit!',
-    show_discount_col: 1,
+    show_discount_col: 0,
     show_customer_name: 1
   })
 
@@ -31,13 +32,14 @@ export default function InvoiceSettings() {
         setForm(prev => ({
           ...prev,
           ...s,
-          header_font_size: Number(s.header_font_size) || 16,
-          address_font_size: Number(s.address_font_size) || 11,
-          meta_font_size: Number(s.meta_font_size) || 10.5,
-          item_font_size: Number(s.item_font_size) || 11,
-          total_font_size: Number(s.total_font_size) || 11,
-          footer_font_size: Number(s.footer_font_size) || 9.5,
-          show_discount_col: s.show_discount_col ?? 1,
+          header_font_size: Number(s.header_font_size) || 19,
+          address_font_size: Number(s.address_font_size) || 13.5,
+          meta_font_size: Number(s.meta_font_size) || 12.5,
+          item_font_size: Number(s.item_font_size) || 12.5,
+          total_font_size: Number(s.total_font_size) || 13,
+          net_total_font_size: Number(s.net_total_font_size) || 16,
+          footer_font_size: Number(s.footer_font_size) || 10,
+          show_discount_col: s.show_discount_col ?? 0,
           show_customer_name: s.show_customer_name ?? 1
         }))
       }
@@ -85,18 +87,19 @@ export default function InvoiceSettings() {
     setForm({
       store_name: 'Harmain Medical Store',
       tagline: '',
-      address: 'Opposite Nadra Kiosk Main Bazar Raiwind',
+      address: 'Opposite Nadra Kiosik Main Bazar Raiwind',
       phone: '03228684603',
       paper_width: '80mm',
-      header_font_size: 16,
-      address_font_size: 11,
-      meta_font_size: 10.5,
-      item_font_size: 11,
-      total_font_size: 11,
-      footer_font_size: 9.5,
+      header_font_size: 19,
+      address_font_size: 13.5,
+      meta_font_size: 12.5,
+      item_font_size: 12.5,
+      total_font_size: 13,
+      net_total_font_size: 16,
+      footer_font_size: 10,
       footer_terms: 'LOOSE ITEMS, VACCINES, INHALERS AND\nFRIDGE ITEMS WILL NOT BE RETURNED.',
       thank_you_msg: 'Thank You For Your Visit!',
-      show_discount_col: 1,
+      show_discount_col: 0,
       show_customer_name: 1
     })
     setMsg({ type: 'info', text: 'Reset to defaults. Click "Save Settings" to apply.' })
@@ -304,17 +307,17 @@ export default function InvoiceSettings() {
                   </div>
                   <input 
                     type="range" 
-                    min="10" 
-                    max="14" 
-                    step="1"
+                    min="11" 
+                    max="16" 
+                    step="0.5"
                     value={form.address_font_size}
                     onChange={e => handleChange('address_font_size', Number(e.target.value))}
                     className="w-full accent-[#003c90] cursor-pointer"
                   />
                   <div className="flex justify-between text-[10px] text-gray-400 mt-0.5">
-                    <span>10px</span>
-                    <span>12px (Standard)</span>
-                    <span>14px</span>
+                    <span>11px</span>
+                    <span>13.5px (Recommended)</span>
+                    <span>16px</span>
                   </div>
                 </div>
 
@@ -328,17 +331,17 @@ export default function InvoiceSettings() {
                   </div>
                   <input 
                     type="range" 
-                    min="9" 
-                    max="13" 
-                    step="1"
+                    min="10" 
+                    max="15" 
+                    step="0.5"
                     value={form.item_font_size}
                     onChange={e => handleChange('item_font_size', Number(e.target.value))}
                     className="w-full accent-[#003c90] cursor-pointer"
                   />
                   <div className="flex justify-between text-[10px] text-gray-400 mt-0.5">
-                    <span>9px (Dense)</span>
-                    <span>11px (Clear)</span>
-                    <span>13px (Spacious)</span>
+                    <span>10px (Compact)</span>
+                    <span>12.5px (Recommended)</span>
+                    <span>15px (Large)</span>
                   </div>
                 </div>
 
@@ -353,8 +356,8 @@ export default function InvoiceSettings() {
                   <input 
                     type="range" 
                     min="11" 
-                    max="16" 
-                    step="1"
+                    max="18" 
+                    step="0.5"
                     value={form.total_font_size}
                     onChange={e => handleChange('total_font_size', Number(e.target.value))}
                     className="w-full accent-[#003c90] cursor-pointer"
@@ -362,7 +365,7 @@ export default function InvoiceSettings() {
                   <div className="flex justify-between text-[10px] text-gray-400 mt-0.5">
                     <span>11px</span>
                     <span>13px (Default)</span>
-                    <span>16px (Prominent)</span>
+                    <span>18px (Prominent)</span>
                   </div>
                 </div>
 
@@ -377,8 +380,8 @@ export default function InvoiceSettings() {
                   <input 
                     type="range" 
                     min="8" 
-                    max="12" 
-                    step="1"
+                    max="14" 
+                    step="0.5"
                     value={form.footer_font_size}
                     onChange={e => handleChange('footer_font_size', Number(e.target.value))}
                     className="w-full accent-[#003c90] cursor-pointer"
@@ -386,7 +389,7 @@ export default function InvoiceSettings() {
                   <div className="flex justify-between text-[10px] text-gray-400 mt-0.5">
                     <span>8px</span>
                     <span>10px (Standard)</span>
-                    <span>12px</span>
+                    <span>14px</span>
                   </div>
                 </div>
               </div>
@@ -464,12 +467,12 @@ export default function InvoiceSettings() {
                   maxWidth: '100%',
                   background: '#ffffff',
                   color: '#000000',
-                  padding: '2mm 4mm',
+                  padding: '2mm 3mm',
                   boxSizing: 'border-box',
                   fontFamily: 'Arial, Helvetica, sans-serif',
                   boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
                   borderRadius: '2px',
-                  lineHeight: 1.4
+                  lineHeight: 1.35
                 }}
               >
                 {/* Header Title */}
@@ -477,9 +480,10 @@ export default function InvoiceSettings() {
                   style={{
                     textAlign: 'center',
                     fontWeight: 'bold',
-                    fontSize: '16px',
+                    fontSize: `${form.header_font_size}px`,
                     letterSpacing: '0.2px',
-                    wordBreak: 'break-word'
+                    wordBreak: 'break-word',
+                    lineHeight: 1.25
                   }}
                 >
                   {form.store_name || 'Harmain Medical Store'}
@@ -489,7 +493,7 @@ export default function InvoiceSettings() {
                 <div 
                   style={{
                     textAlign: 'center',
-                    fontSize: '13px',
+                    fontSize: `${form.address_font_size}px`,
                     marginTop: '2px',
                     lineHeight: 1.3
                   }}
@@ -501,8 +505,9 @@ export default function InvoiceSettings() {
                 <div 
                   style={{
                     textAlign: 'center',
-                    fontSize: '13px',
-                    marginTop: '2px'
+                    fontSize: `${form.address_font_size}px`,
+                    marginTop: '2px',
+                    lineHeight: 1.3
                   }}
                 >
                   Phone #: {form.phone || '03228684603'}
@@ -512,11 +517,11 @@ export default function InvoiceSettings() {
                 <div style={{ borderTop: '1px dashed #000', margin: '4px 0' }}></div>
 
                 {/* Invoice Meta */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: `${form.meta_font_size}px` }}>
                   <span>No. INV-15666</span>
                   <span>14/11/2026 13:16</span>
                 </div>
-                <div style={{ fontSize: '11px' }}>
+                <div style={{ fontSize: `${form.meta_font_size}px`, marginTop: '1px' }}>
                   M/a: Walk-in Customer
                 </div>
 
@@ -527,10 +532,11 @@ export default function InvoiceSettings() {
                 <div 
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: '45% 15% 20% 20%',
-                    fontSize: '11px',
+                    gridTemplateColumns: '46% 14% 18% 22%',
+                    fontSize: `${(Number(form.item_font_size) || 12.5) + 0.5}px`,
                     fontWeight: 'bold',
-                    marginBottom: '3px'
+                    marginBottom: '3px',
+                    lineHeight: 1.3
                   }}
                 >
                   <div>Item Name</div>
@@ -540,75 +546,80 @@ export default function InvoiceSettings() {
                 </div>
 
                 {/* Sample Items (matching user receipt photo!) */}
-                <div style={{ fontSize: '11px' }}>
+                <div style={{ fontSize: `${form.item_font_size}px` }}>
                   {/* Item 1 */}
                   <div 
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: '45% 15% 20% 20%',
-                      marginBottom: '3px'
+                      gridTemplateColumns: '46% 14% 18% 22%',
+                      marginBottom: '3px',
+                      lineHeight: 1.3
                     }}
                   >
-                    <div style={{ wordBreak: 'break-word', paddingRight: '2px' }}>OMEGA 20MG CAP</div>
+                    <div style={{ wordBreak: 'break-word', paddingRight: '2px', fontWeight: '500' }}>OMEGA 20MG CAP</div>
                     <div style={{ textAlign: 'right' }}>3</div>
                     <div style={{ textAlign: 'right' }}>27.86</div>
-                    <div style={{ textAlign: 'right' }}>83.57</div>
+                    <div style={{ textAlign: 'right', fontWeight: 'bold' }}>83.57</div>
                   </div>
 
                   {/* Item 2 */}
                   <div 
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: '45% 15% 20% 20%',
-                      marginBottom: '3px'
+                      gridTemplateColumns: '46% 14% 18% 22%',
+                      marginBottom: '3px',
+                      lineHeight: 1.3
                     }}
                   >
-                    <div style={{ wordBreak: 'break-word', paddingRight: '2px' }}>KESTINE 10MG TAB</div>
+                    <div style={{ wordBreak: 'break-word', paddingRight: '2px', fontWeight: '500' }}>KESTINE 10MG TAB</div>
                     <div style={{ textAlign: 'right' }}>3</div>
                     <div style={{ textAlign: 'right' }}>21.24</div>
-                    <div style={{ textAlign: 'right' }}>63.71</div>
+                    <div style={{ textAlign: 'right', fontWeight: 'bold' }}>63.71</div>
                   </div>
 
                   {/* Item 3 */}
                   <div 
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: '45% 15% 20% 20%',
-                      marginBottom: '3px'
+                      gridTemplateColumns: '46% 14% 18% 22%',
+                      marginBottom: '3px',
+                      lineHeight: 1.3
                     }}
                   >
-                    <div style={{ wordBreak: 'break-word', paddingRight: '2px' }}>MYTEKA 10MG TAB</div>
+                    <div style={{ wordBreak: 'break-word', paddingRight: '2px', fontWeight: '500' }}>MYTEKA 10MG TAB</div>
                     <div style={{ textAlign: 'right' }}>3</div>
                     <div style={{ textAlign: 'right' }}>39.57</div>
-                    <div style={{ textAlign: 'right' }}>118.71</div>
+                    <div style={{ textAlign: 'right', fontWeight: 'bold' }}>118.71</div>
                   </div>
 
                   {/* Item 4 */}
                   <div 
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: '45% 15% 20% 20%',
-                      marginBottom: '3px'
+                      gridTemplateColumns: '46% 14% 18% 22%',
+                      marginBottom: '3px',
+                      lineHeight: 1.3
                     }}
                   >
-                    <div style={{ wordBreak: 'break-word', paddingRight: '2px' }}>DR KOFF CANDY(RS#10)</div>
+                    <div style={{ wordBreak: 'break-word', paddingRight: '2px', fontWeight: '500' }}>DR KOFF CANDY(RS#10)</div>
                     <div style={{ textAlign: 'right' }}>10</div>
                     <div style={{ textAlign: 'right' }}>10.00</div>
-                    <div style={{ textAlign: 'right' }}>100.00</div>
+                    <div style={{ textAlign: 'right', fontWeight: 'bold' }}>100.00</div>
                   </div>
 
                   {/* Item 5 */}
                   <div 
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: '45% 15% 20% 20%',
-                      marginBottom: '3px'
+                      gridTemplateColumns: '46% 14% 18% 22%',
+                      marginBottom: '3px',
+                      lineHeight: 1.3
                     }}
                   >
-                    <div style={{ wordBreak: 'break-word', paddingRight: '2px' }}>GOURMET 1.5 LTR (LEMON)</div>
+                    <div style={{ wordBreak: 'break-word', paddingRight: '2px', fontWeight: '500' }}>GOURMET 1.5 LTR (LEMON)</div>
                     <div style={{ textAlign: 'right' }}>1</div>
                     <div style={{ textAlign: 'right' }}>160.00</div>
-                    <div style={{ textAlign: 'right' }}>160.00</div>
+                    <div style={{ textAlign: 'right', fontWeight: 'bold' }}>160.00</div>
                   </div>
                 </div>
 
@@ -616,15 +627,15 @@ export default function InvoiceSettings() {
                 <div style={{ borderTop: '1px dashed #000', margin: '4px 0' }}></div>
 
                 {/* Gross Total */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: `${form.total_font_size}px`, margin: '2px 0' }}>
                   <span style={{ flex: 1, textAlign: 'center' }}>Gross Total:</span>
-                  <span style={{ textAlign: 'right', minWidth: '80px' }}>525.99</span>
+                  <span style={{ textAlign: 'right', minWidth: '85px', fontWeight: 'bold' }}>525.99</span>
                 </div>
 
                 {/* Discount */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: `${form.total_font_size}px`, margin: '2px 0' }}>
                   <span style={{ flex: 1, textAlign: 'center' }}>Discount:</span>
-                  <span style={{ textAlign: 'right', minWidth: '80px' }}>26.30</span>
+                  <span style={{ textAlign: 'right', minWidth: '85px', fontWeight: 'bold' }}>26.30</span>
                 </div>
 
                 {/* Divider Line */}
@@ -635,12 +646,13 @@ export default function InvoiceSettings() {
                   style={{
                     display: 'flex',
                     justifyContent: 'space-between',
-                    fontSize: '13px',
-                    fontWeight: 'bold'
+                    fontSize: `${form.net_total_font_size || 16}px`,
+                    fontWeight: 'bold',
+                    margin: '3px 0'
                   }}
                 >
                   <span style={{ flex: 1, textAlign: 'center' }}>Net Total</span>
-                  <span style={{ textAlign: 'right', minWidth: '80px' }}>499.69</span>
+                  <span style={{ textAlign: 'right', minWidth: '90px' }}>499.69</span>
                 </div>
 
                 {/* Divider Line */}

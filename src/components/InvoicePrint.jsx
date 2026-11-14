@@ -11,6 +11,15 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false }) {
     store_name: 'Harmain Medical Store',
     address: 'Opposite Nadra Kiosik Main Bazar Raiwind',
     phone: '03228684603',
+    header_font_size: 19,
+    address_font_size: 13.5,
+    meta_font_size: 12.5,
+    item_font_size: 12.5,
+    total_font_size: 13,
+    net_total_font_size: 16,
+    footer_font_size: 10,
+    footer_terms: 'LOOSE ITEMS, VACCINES, INHALERS AND\nFRIDGE ITEMS WILL NOT BE RETURNED.',
+    thank_you_msg: 'Thank You For Your Visit!'
   })
 
   useEffect(() => {
@@ -20,7 +29,16 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false }) {
           ...prev,
           store_name: s.store_name || prev.store_name,
           address: s.address || prev.address,
-          phone: s.phone || prev.phone
+          phone: s.phone || prev.phone,
+          header_font_size: Number(s.header_font_size) || prev.header_font_size,
+          address_font_size: Number(s.address_font_size) || prev.address_font_size,
+          meta_font_size: Number(s.meta_font_size) || prev.meta_font_size,
+          item_font_size: Number(s.item_font_size) || prev.item_font_size,
+          total_font_size: Number(s.total_font_size) || prev.total_font_size,
+          net_total_font_size: Number(s.net_total_font_size) || prev.net_total_font_size,
+          footer_font_size: Number(s.footer_font_size) || prev.footer_font_size,
+          footer_terms: s.footer_terms || prev.footer_terms,
+          thank_you_msg: s.thank_you_msg || prev.thank_you_msg
         }))
       }
     }).catch(() => {})
@@ -106,8 +124,37 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false }) {
       {/* Print Styles */}
       <style>{`
         @media print {
+          @page {
+            margin: 0;
+          }
+          
+          html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+            background: #ffffff !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          
           body * {
             visibility: hidden;
+          }
+          
+          .invoice-modal-backdrop,
+          .invoice-modal-container {
+            position: static !important;
+            display: block !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+            background: transparent !important;
+            box-shadow: none !important;
+            border: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
           }
           
           #thermal-receipt, #thermal-receipt * {
@@ -120,18 +167,20 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false }) {
             top: 0 !important;
             transform: translateX(-50%) !important;
             width: 72mm !important;
-            margin: 0 !important;
-            padding: 0 !important;
+            max-width: 72mm !important;
+            margin: 0 auto !important;
+            padding: 1.5mm 1mm 3mm 1mm !important;
+            box-sizing: border-box !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
+            background: #ffffff !important;
           }
           
-          @page {
-            size: 80mm auto;
-            margin: 0;
-          }
-          
-          body {
-            margin: 0 !important;
-            padding: 0 !important;
+          .line {
+            border-top: 1px dashed #000000 !important;
+            width: 100% !important;
+            display: block !important;
+            margin: 4px 0 !important;
           }
           
           .no-print {
@@ -142,13 +191,15 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false }) {
         #thermal-receipt {
           font-family: Arial, Helvetica, sans-serif;
           width: 72mm;
-          background: white;
-          padding: 2mm 4mm;
-          font-size: 12px;
-          line-height: 1.4;
-          color: #000;
+          max-width: 100%;
+          background: #ffffff;
+          padding: 2mm 3mm;
+          font-size: 12.5px;
+          line-height: 1.35;
+          color: #000000;
           box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
           margin: 0 auto;
+          box-sizing: border-box;
         }
         
         .center {
@@ -160,7 +211,9 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false }) {
         }
         
         .line {
-          border-top: 1px dashed #000;
+          border-top: 1px dashed #000000;
+          width: 100%;
+          display: block;
           margin: 4px 0;
         }
         
@@ -178,36 +231,37 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false }) {
       {/* Receipt Content */}
       <div id="thermal-receipt">
         {/* Header - Centered */}
-        <div className="center bold" style={{ fontSize: '16px' }}>
+        <div className="center bold" style={{ fontSize: `${settings.header_font_size || 19}px`, lineHeight: 1.25, letterSpacing: '0.2px' }}>
           {settings.store_name || 'Harmain Medical Store'}
         </div>
-        <div className="center" style={{ fontSize: '13px', marginTop: '2px' }}>
+        <div className="center" style={{ fontSize: `${settings.address_font_size || 13.5}px`, marginTop: '2px', lineHeight: 1.3 }}>
           {settings.address || 'Opposite Nadra Kiosik Main Bazar Raiwind'}
         </div>
-        <div className="center" style={{ fontSize: '13px', marginTop: '2px' }}>
+        <div className="center" style={{ fontSize: `${settings.address_font_size || 13.5}px`, marginTop: '2px', lineHeight: 1.3 }}>
           Phone #: {settings.phone || '03228684603'}
         </div>
         
         <div className="line"></div>
         
         {/* Invoice Details */}
-        <div className="space-between" style={{ fontSize: '11px' }}>
+        <div className="space-between" style={{ fontSize: `${settings.meta_font_size || 12.5}px` }}>
           <span>No. {invoice.invoice_no}</span>
           <span>{dateStr} {timeStr}</span>
         </div>
-        <div style={{ fontSize: '11px' }}>
+        <div style={{ fontSize: `${settings.meta_font_size || 12.5}px`, marginTop: '1px' }}>
           M/a: {invoice.customer_name || 'Walk-in Customer'}
         </div>
         
         <div className="line"></div>
         
-        {/* Items Header - Grid Layout */}
+        {/* Items Header - Grid Layout (4 columns matching exact desired layout) */}
         <div style={{ 
           display: 'grid',
-          gridTemplateColumns: '45% 15% 20% 20%',
-          fontSize: '11px',
+          gridTemplateColumns: '46% 14% 18% 22%',
+          fontSize: `${(Number(settings.item_font_size) || 12.5) + 0.5}px`,
           marginBottom: '3px',
-          fontWeight: 'bold'
+          fontWeight: 'bold',
+          lineHeight: 1.3
         }}>
           <div>Item Name</div>
           <div style={{ textAlign: 'right' }}>Qty</div>
@@ -219,46 +273,57 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false }) {
         {groupedItems.map((item, idx) => (
           <div key={idx} style={{ 
             display: 'grid',
-            gridTemplateColumns: '45% 15% 20% 20%',
-            fontSize: '11px',
-            marginBottom: '3px'
+            gridTemplateColumns: '46% 14% 18% 22%',
+            fontSize: `${settings.item_font_size || 12.5}px`,
+            marginBottom: '3px',
+            lineHeight: 1.3
           }}>
-            <div style={{ wordBreak: 'break-word', paddingRight: '2px' }}>{item.product_name}</div>
+            <div style={{ wordBreak: 'break-word', paddingRight: '2px', fontWeight: '500' }}>{item.product_name}</div>
             <div style={{ textAlign: 'right' }}>{item.qty}</div>
             <div style={{ textAlign: 'right' }}>{fmt(item.sale_price)}</div>
-            <div style={{ textAlign: 'right' }}>{fmt(item.total)}</div>
+            <div style={{ textAlign: 'right', fontWeight: 'bold' }}>{fmt(item.total)}</div>
           </div>
         ))}
         
         <div className="line"></div>
         
         {/* Totals - Labels centered, values right-aligned */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: `${settings.total_font_size || 13}px`, margin: '2px 0' }}>
           <span style={{ flex: 1, textAlign: 'center' }}>Gross Total:</span>
-          <span style={{ textAlign: 'right', minWidth: '80px' }}>{fmt(invoice.sub_total)}</span>
+          <span style={{ textAlign: 'right', minWidth: '85px', fontWeight: 'bold' }}>{fmt(invoice.sub_total)}</span>
         </div>
         
         {invoice.discount > 0 && (
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: `${settings.total_font_size || 13}px`, margin: '2px 0' }}>
             <span style={{ flex: 1, textAlign: 'center' }}>Discount:</span>
-            <span style={{ textAlign: 'right', minWidth: '80px' }}>{fmt(invoice.discount)}</span>
+            <span style={{ textAlign: 'right', minWidth: '85px', fontWeight: 'bold' }}>{fmt(invoice.discount)}</span>
           </div>
         )}
         
         <div className="line"></div>
         
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', fontWeight: 'bold' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: `${settings.net_total_font_size || 16}px`, fontWeight: 'bold', margin: '3px 0' }}>
           <span style={{ flex: 1, textAlign: 'center' }}>Net Total</span>
-          <span style={{ textAlign: 'right', minWidth: '80px' }}>{fmt(invoice.grand_total)}</span>
+          <span style={{ textAlign: 'right', minWidth: '90px' }}>{fmt(invoice.grand_total)}</span>
         </div>
         
         <div className="line"></div>
         
         {/* Footer */}
-        <div className="center" style={{ fontSize: '9px', marginTop: '4px' }}>
-          <div>LOOSE ITEMS, VACCINES, INHALERS AND</div>
-          <div>FRIDGE ITEMS WILL NOT BE RETURNED.</div>
-          <div style={{ marginTop: '4px', fontWeight: 'bold' }}>Thank You For Your Visit!</div>
+        <div className="center" style={{ fontSize: `${settings.footer_font_size || 10}px`, marginTop: '4px', lineHeight: 1.35 }}>
+          {settings.footer_terms ? (
+            <div style={{ whiteSpace: 'pre-line' }}>{settings.footer_terms}</div>
+          ) : (
+            <>
+              <div>LOOSE ITEMS, VACCINES, INHALERS AND</div>
+              <div>FRIDGE ITEMS WILL NOT BE RETURNED.</div>
+            </>
+          )}
+          {settings.thank_you_msg && (
+            <div style={{ marginTop: '4px', fontWeight: 'bold', fontSize: `${(Number(settings.footer_font_size) || 10) + 0.5}px` }}>
+              {settings.thank_you_msg}
+            </div>
+          )}
         </div>
       </div>
 

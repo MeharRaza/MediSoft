@@ -283,23 +283,21 @@ function runMigrations() {
       console.log('✅ expenses table already exists')
     }
     
-    // Migration 12: Upgrade invoice_settings default typography for full-width 80mm receipts
+    // Migration 12: Clean, non-bold standard thermal receipt settings
     const invoiceSettingsTable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='invoice_settings'").get()
     if (invoiceSettingsTable) {
-      const curr = db.prepare("SELECT * FROM invoice_settings WHERE id=1").get()
-      if (curr && (!curr.item_font_size || curr.item_font_size <= 11)) {
-        db.prepare(`
-          UPDATE invoice_settings 
-          SET header_font_size = 20,
-              address_font_size = 13,
-              meta_font_size = 12,
-              item_font_size = 12,
-              total_font_size = 14,
-              footer_font_size = 11
-          WHERE id = 1
-        `).run()
-        console.log('✅ invoice_settings upgraded to optimal 80mm full-width typography')
-      }
+      db.prepare(`
+        UPDATE invoice_settings 
+        SET paper_width = '80mm',
+            header_font_size = 16,
+            address_font_size = 11,
+            meta_font_size = 10.5,
+            item_font_size = 11,
+            total_font_size = 11,
+            footer_font_size = 9.5
+        WHERE id = 1
+      `).run()
+      console.log('✅ invoice_settings updated to clean, non-bold 80mm format')
     }
 
     console.log('✅ All migrations checked and applied successfully!')
@@ -334,13 +332,13 @@ CREATE TABLE IF NOT EXISTS invoice_settings (
   tagline TEXT DEFAULT '',
   address TEXT DEFAULT 'Opposite Nadra Kiosk Main Bazar Raiwind',
   phone TEXT DEFAULT '03228684603',
-  paper_width TEXT DEFAULT '85mm',
-  header_font_size INTEGER DEFAULT 20,
-  address_font_size INTEGER DEFAULT 13,
-  meta_font_size INTEGER DEFAULT 12,
-  item_font_size INTEGER DEFAULT 12,
-  total_font_size INTEGER DEFAULT 14,
-  footer_font_size INTEGER DEFAULT 11,
+  paper_width TEXT DEFAULT '80mm',
+  header_font_size REAL DEFAULT 16,
+  address_font_size REAL DEFAULT 11,
+  meta_font_size REAL DEFAULT 10.5,
+  item_font_size REAL DEFAULT 11,
+  total_font_size REAL DEFAULT 11,
+  footer_font_size REAL DEFAULT 9.5,
   footer_terms TEXT DEFAULT 'LOOSE ITEMS, VACCINES, INHALERS AND FRIDGE ITEMS WILL NOT BE RETURNED.',
   thank_you_msg TEXT DEFAULT 'Thank You For Your Visit!',
   show_discount_col INTEGER DEFAULT 1,

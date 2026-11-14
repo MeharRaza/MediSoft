@@ -129,6 +129,42 @@ export const api = {
     updateBranch:    (data) => isElectron ? window.api.settings.updateBranch(data) : Promise.resolve({ success: true }),
     getCompanyInfo:  () => isElectron ? window.api.settings.getCompanyInfo() : Promise.resolve({ name: 'MediSoft Pharmacy', currency: 'PKR', tax_rate: 0 }),
     saveCompanyInfo: (data) => isElectron ? window.api.settings.saveCompanyInfo(data) : Promise.resolve({ success: true }),
+    getInvoiceSettings: () => {
+      if (isElectron && window.api?.settings?.getInvoiceSettings) {
+        return window.api.settings.getInvoiceSettings()
+      }
+      try {
+        const saved = localStorage.getItem('medisoft_invoice_settings')
+        if (saved) return Promise.resolve(JSON.parse(saved))
+      } catch (e) {}
+      return Promise.resolve({
+        id: 1,
+        store_name: 'Harmain Medical Store',
+        tagline: '',
+        address: 'Opposite Nadra Kiosk Main Bazar Raiwind',
+        phone: '03228684603',
+        paper_width: '85mm',
+        header_font_size: 18,
+        address_font_size: 12,
+        meta_font_size: 11,
+        item_font_size: 11,
+        total_font_size: 13,
+        footer_font_size: 10,
+        footer_terms: 'LOOSE ITEMS, VACCINES, INHALERS AND FRIDGE ITEMS WILL NOT BE RETURNED.',
+        thank_you_msg: 'Thank You For Your Visit!',
+        show_discount_col: 1,
+        show_customer_name: 1
+      })
+    },
+    saveInvoiceSettings: (data) => {
+      try {
+        localStorage.setItem('medisoft_invoice_settings', JSON.stringify(data))
+      } catch (e) {}
+      if (isElectron && window.api?.settings?.saveInvoiceSettings) {
+        return window.api.settings.saveInvoiceSettings(data)
+      }
+      return Promise.resolve({ success: true })
+    },
   },
   dashboard: {
     getStats: () => isElectron ? window.api.dashboard.getStats() : Promise.resolve({

@@ -128,6 +128,122 @@ module.exports = (ipcMain) => {
     return { success: true }
   })
 
+  // ─── INVOICE / THERMAL RECEIPT SETTINGS ──────────────────────────────
+  ipcMain.handle('settings:getInvoiceSettings', () => {
+    try {
+      // Ensure table exists
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS invoice_settings (
+          id INTEGER PRIMARY KEY DEFAULT 1,
+          store_name TEXT DEFAULT 'Harmain Medical Store',
+          tagline TEXT DEFAULT '',
+          address TEXT DEFAULT 'Opposite Nadra Kiosk Main Bazar Raiwind',
+          phone TEXT DEFAULT '03228684603',
+          paper_width TEXT DEFAULT '85mm',
+          header_font_size INTEGER DEFAULT 18,
+          address_font_size INTEGER DEFAULT 12,
+          meta_font_size INTEGER DEFAULT 11,
+          item_font_size INTEGER DEFAULT 11,
+          total_font_size INTEGER DEFAULT 13,
+          footer_font_size INTEGER DEFAULT 10,
+          footer_terms TEXT DEFAULT 'LOOSE ITEMS, VACCINES, INHALERS AND FRIDGE ITEMS WILL NOT BE RETURNED.',
+          thank_you_msg TEXT DEFAULT 'Thank You For Your Visit!',
+          show_discount_col INTEGER DEFAULT 1,
+          show_customer_name INTEGER DEFAULT 1,
+          updated_at TEXT DEFAULT (datetime('now', 'localtime'))
+        );
+        INSERT OR IGNORE INTO invoice_settings (id, store_name, address, phone)
+        VALUES (1, 'Harmain Medical Store', 'Opposite Nadra Kiosk Main Bazar Raiwind', '03228684603');
+      `)
+
+      const row = db.prepare('SELECT * FROM invoice_settings WHERE id = 1').get()
+      if (row) return row
+
+      const comp = db.prepare('SELECT * FROM company WHERE id = 1').get()
+      return {
+        id: 1,
+        store_name: comp?.name || 'Harmain Medical Store',
+        tagline: '',
+        address: comp?.address || 'Opposite Nadra Kiosk Main Bazar Raiwind',
+        phone: comp?.phone || '03228684603',
+        paper_width: '85mm',
+        header_font_size: 18,
+        address_font_size: 12,
+        meta_font_size: 11,
+        item_font_size: 11,
+        total_font_size: 13,
+        footer_font_size: 10,
+        footer_terms: 'LOOSE ITEMS, VACCINES, INHALERS AND FRIDGE ITEMS WILL NOT BE RETURNED.',
+        thank_you_msg: 'Thank You For Your Visit!',
+        show_discount_col: 1,
+        show_customer_name: 1
+      }
+    } catch (err) {
+      console.error('[Settings] getInvoiceSettings error:', err)
+      return null
+    }
+  })
+
+  ipcMain.handle('settings:saveInvoiceSettings', (_, data) => {
+    try {
+      db.prepare(`
+        INSERT INTO invoice_settings (
+          id, store_name, tagline, address, phone, paper_width,
+          header_font_size, address_font_size, meta_font_size, item_font_size, total_font_size, footer_font_size,
+          footer_terms, thank_you_msg, show_discount_col, show_customer_name, updated_at
+        ) VALUES (
+          1, ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, datetime('now', 'localtime')
+        )
+        ON CONFLICT(id) DO UPDATE SET
+          store_name = excluded.store_name,
+          tagline = excluded.tagline,
+          address = excluded.address,
+          phone = excluded.phone,
+          paper_width = excluded.paper_width,
+          header_font_size = excluded.header_font_size,
+          address_font_size = excluded.address_font_size,
+          meta_font_size = excluded.meta_font_size,
+          item_font_size = excluded.item_font_size,
+          total_font_size = excluded.total_font_size,
+          footer_font_size = excluded.footer_font_size,
+          footer_terms = excluded.footer_terms,
+          thank_you_msg = excluded.thank_you_msg,
+          show_discount_col = excluded.show_discount_col,
+          show_customer_name = excluded.show_customer_name,
+          updated_at = datetime('now', 'localtime')
+      `).run(
+        data.store_name || 'Harmain Medical Store',
+        data.tagline || '',
+        data.address || '',
+        data.phone || '',
+        data.paper_width || '85mm',
+        Number(data.header_font_size) || 18,
+        Number(data.address_font_size) || 12,
+        Number(data.meta_font_size) || 11,
+        Number(data.item_font_size) || 11,
+        Number(data.total_font_size) || 13,
+        Number(data.footer_font_size) || 10,
+        data.footer_terms ?? 'LOOSE ITEMS, VACCINES, INHALERS AND FRIDGE ITEMS WILL NOT BE RETURNED.',
+        data.thank_you_msg ?? 'Thank You For Your Visit!',
+        data.show_discount_col ? 1 : 0,
+        data.show_customer_name ? 1 : 0
+      )
+
+      // Keep company table name, address, phone in sync
+      if (data.store_name) {
+        db.prepare(`UPDATE company SET name=?, address=?, phone=?, updated_at=datetime('now') WHERE id=1`)
+          .run(data.store_name, data.address || '', data.phone || '')
+      }
+
+      return { success: true }
+    } catch (err) {
+      console.error('[Settings] saveInvoiceSettings error:', err)
+      return { success: false, error: err.message }
+    }
+  })
+
   // ─── BACKUP & RESTORE SYSTEM ──────────────────────────────────────────
 
   // Get database info

@@ -309,6 +309,29 @@ CREATE TABLE IF NOT EXISTS company (
   updated_at TEXT DEFAULT (datetime('now', 'localtime'))
 );
 
+CREATE TABLE IF NOT EXISTS invoice_settings (
+  id INTEGER PRIMARY KEY DEFAULT 1,
+  store_name TEXT DEFAULT 'Harmain Medical Store',
+  tagline TEXT DEFAULT '',
+  address TEXT DEFAULT 'Opposite Nadra Kiosk Main Bazar Raiwind',
+  phone TEXT DEFAULT '03228684603',
+  paper_width TEXT DEFAULT '85mm',
+  header_font_size INTEGER DEFAULT 18,
+  address_font_size INTEGER DEFAULT 12,
+  meta_font_size INTEGER DEFAULT 11,
+  item_font_size INTEGER DEFAULT 11,
+  total_font_size INTEGER DEFAULT 13,
+  footer_font_size INTEGER DEFAULT 10,
+  footer_terms TEXT DEFAULT 'LOOSE ITEMS, VACCINES, INHALERS AND FRIDGE ITEMS WILL NOT BE RETURNED.',
+  thank_you_msg TEXT DEFAULT 'Thank You For Your Visit!',
+  show_discount_col INTEGER DEFAULT 1,
+  show_customer_name INTEGER DEFAULT 1,
+  updated_at TEXT DEFAULT (datetime('now', 'localtime'))
+);
+
+INSERT OR IGNORE INTO invoice_settings (id, store_name, address, phone)
+VALUES (1, 'Harmain Medical Store', 'Opposite Nadra Kiosk Main Bazar Raiwind', '03228684603');
+
 CREATE TABLE IF NOT EXISTS branches (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,

@@ -7,16 +7,28 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false }) {
   const printButtonRef = useRef(null)
   const closeButtonRef = useRef(null)
   const hasAutoPrinted = useRef(false) // Track if auto-print already happened
-  const [company, setCompany] = useState({ name: '', address: '', phone: '' })
+  const [settings, setSettings] = useState({
+    store_name: 'Harmain Medical Store',
+    tagline: '',
+    address: 'Opposite Nadra Kiosk Main Bazar Raiwind',
+    phone: '03228684603',
+    paper_width: '85mm',
+    header_font_size: 18,
+    address_font_size: 12,
+    meta_font_size: 11,
+    item_font_size: 11,
+    total_font_size: 13,
+    footer_font_size: 10,
+    footer_terms: 'LOOSE ITEMS, VACCINES, INHALERS AND FRIDGE ITEMS WILL NOT BE RETURNED.',
+    thank_you_msg: 'Thank You For Your Visit!',
+    show_discount_col: 1,
+    show_customer_name: 1
+  })
 
   useEffect(() => {
-    api.settings.getCompanyInfo().then(c => {
-      if (c) {
-        setCompany({
-          name: c.name || '',
-          address: c.address || '',
-          phone: c.phone || ''
-        })
+    api.settings.getInvoiceSettings().then(s => {
+      if (s) {
+        setSettings(prev => ({ ...prev, ...s }))
       }
     }).catch(() => {})
   }, [])
@@ -127,23 +139,26 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false }) {
           }
           
           #thermal-receipt {
-            position: absolute;
-            left: 50%;
-            top: 0;
-            transform: translateX(-50%);
-            width: 72mm;
-            margin: 0;
-            padding: 0;
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: ${settings.paper_width === '85mm' ? '85mm' : '80mm'} !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 2mm 3mm !important;
+            box-sizing: border-box !important;
+            transform: none !important;
           }
           
           @page {
-            size: 80mm auto;
-            margin: 0;
+            size: ${settings.paper_width === '85mm' ? '85mm' : '80mm'} auto;
+            margin: 0mm;
           }
           
           body {
-            margin: 0;
-            padding: 0;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: white !important;
           }
           
           .no-print {
@@ -153,12 +168,16 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false }) {
         
         #thermal-receipt {
           font-family: Arial, Helvetica, sans-serif;
-          width: 72mm;
+          width: ${settings.paper_width === '85mm' ? '85mm' : '80mm'};
+          max-width: 100%;
           background: white;
-          padding: 2mm 4mm;
-          font-size: 12px;
-          line-height: 1.4;
+          padding: 3mm 4mm;
+          box-sizing: border-box;
+          font-size: ${settings.item_font_size || 11}px;
+          line-height: 1.35;
           color: #000;
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+          margin: 0 auto;
         }
         
         .center {
@@ -183,45 +202,39 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false }) {
           width: 100%;
           border-collapse: collapse;
         }
-        
-        .items-table th,
-        .items-table td {
-          text-align: right;
-          padding: 2px 4px;
-        }
-        
-        .items-table th:first-child,
-        .items-table td:first-child {
-          text-align: left;
-        }
       `}</style>
 
       {/* Receipt Content */}
       <div id="thermal-receipt">
         {/* Header - Centered */}
-        <div className="center bold" style={{ fontSize: '16px' }}>
-          {company.name || 'MediSoft Pharmacy'}
+        <div className="center bold" style={{ fontSize: `${settings.header_font_size || 18}px`, letterSpacing: '0.2px' }}>
+          {settings.store_name || 'Harmain Medical Store'}
         </div>
-        {company.address ? (
-          <div className="center" style={{ fontSize: '12px', marginTop: '2px' }}>
-            {company.address}
+        {settings.tagline ? (
+          <div className="center" style={{ fontSize: `${(settings.address_font_size || 12) - 1}px`, fontStyle: 'italic', marginTop: '1px' }}>
+            {settings.tagline}
           </div>
         ) : null}
-        {company.phone ? (
-          <div className="center" style={{ fontSize: '12px', marginTop: '2px' }}>
-            Phone #: {company.phone}
+        {settings.address ? (
+          <div className="center" style={{ fontSize: `${settings.address_font_size || 12}px`, marginTop: '2px', lineHeight: 1.3 }}>
+            {settings.address}
+          </div>
+        ) : null}
+        {settings.phone ? (
+          <div className="center" style={{ fontSize: `${settings.address_font_size || 12}px`, marginTop: '2px' }}>
+            Phone #: {settings.phone}
           </div>
         ) : null}
         
         <div className="line"></div>
         
         {/* Invoice Details */}
-        <div className="space-between" style={{ fontSize: '11px' }}>
+        <div className="space-between" style={{ fontSize: `${settings.meta_font_size || 11}px` }}>
           <span>No. {invoice.invoice_no}</span>
           <span>{dateStr} {timeStr}</span>
         </div>
-        <div style={{ fontSize: '11px' }}>
-          M/a: {invoice.customer_name || 'Walk-in Customer'}
+        <div style={{ fontSize: `${settings.meta_font_size || 11}px` }}>
+          M/s: {invoice.customer_name || 'Walk-in Customer'}
         </div>
         
         <div className="line"></div>
@@ -229,15 +242,15 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false }) {
         {/* Items Header - Grid Layout with Discount column */}
         <div style={{ 
           display: 'grid',
-          gridTemplateColumns: '40% 12% 16% 16% 16%',
-          fontSize: '10px',
+          gridTemplateColumns: settings.show_discount_col ? '46% 12% 14% 12% 16%' : '54% 14% 14% 18%',
+          fontSize: `${(settings.item_font_size || 11) - 1}px`,
           marginBottom: '3px',
           fontWeight: 'bold'
         }}>
           <div>Item</div>
           <div style={{ textAlign: 'right' }}>Qty</div>
           <div style={{ textAlign: 'right' }}>Price</div>
-          <div style={{ textAlign: 'right' }}>Disc</div>
+          {settings.show_discount_col ? <div style={{ textAlign: 'right' }}>Disc</div> : null}
           <div style={{ textAlign: 'right' }}>Total</div>
         </div>
         
@@ -250,16 +263,19 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false }) {
           return (
             <div key={idx} style={{ 
               display: 'grid',
-              gridTemplateColumns: '40% 12% 16% 16% 16%',
-              fontSize: '10px',
-              marginBottom: '2px'
+              gridTemplateColumns: settings.show_discount_col ? '46% 12% 14% 12% 16%' : '54% 14% 14% 18%',
+              fontSize: `${settings.item_font_size || 11}px`,
+              marginBottom: '2px',
+              alignItems: 'baseline'
             }}>
-              <div style={{ fontSize: '11px', fontWeight: '500' }}>{item.product_name}</div>
+              <div style={{ fontWeight: '500', wordBreak: 'break-word', paddingRight: '2px' }}>{item.product_name}</div>
               <div style={{ textAlign: 'right' }}>{item.qty}</div>
               <div style={{ textAlign: 'right' }}>{fmt(item.sale_price)}</div>
-              <div style={{ textAlign: 'right' }}>
-                {itemDiscAmt > 0 ? fmt(itemDiscAmt) : '-'}
-              </div>
+              {settings.show_discount_col ? (
+                <div style={{ textAlign: 'right' }}>
+                  {itemDiscAmt > 0 ? fmt(itemDiscAmt) : '-'}
+                </div>
+              ) : null}
               <div style={{ textAlign: 'right', fontWeight: 'bold' }}>{fmt(item.total)}</div>
             </div>
           )
@@ -268,13 +284,13 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false }) {
         <div className="line"></div>
         
         {/* Totals - Labels centered, values right-aligned */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: `${settings.total_font_size || 13}px` }}>
           <span style={{ flex: 1, textAlign: 'center' }}>Gross Total:</span>
           <span style={{ textAlign: 'right', minWidth: '80px' }}>{fmt(invoice.sub_total)}</span>
         </div>
         
         {invoice.discount > 0 && (
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: `${settings.total_font_size || 13}px` }}>
             <span style={{ flex: 1, textAlign: 'center' }}>Discount:</span>
             <span style={{ textAlign: 'right', minWidth: '80px' }}>{fmt(invoice.discount)}</span>
           </div>
@@ -282,7 +298,7 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false }) {
         
         <div className="line"></div>
         
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', fontWeight: 'bold' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: `${(settings.total_font_size || 13) + 2}px`, fontWeight: 'bold' }}>
           <span style={{ flex: 1, textAlign: 'center' }}>Net Total</span>
           <span style={{ textAlign: 'right', minWidth: '80px' }}>{fmt(invoice.grand_total)}</span>
         </div>
@@ -290,10 +306,18 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false }) {
         <div className="line"></div>
         
         {/* Footer */}
-        <div className="center" style={{ fontSize: '9px', marginTop: '4px' }}>
-          <div>LOOSE ITEMS, VACCINES, INHALERS AND</div>
-          <div>FRIDGE ITEMS WILL NOT BE RETURNED.</div>
-          <div style={{ marginTop: '4px', fontWeight: 'bold' }}>Thank You For Your Visit!</div>
+        <div className="center" style={{ fontSize: `${settings.footer_font_size || 10}px`, marginTop: '5px', lineHeight: 1.35 }}>
+          {settings.footer_terms ? (
+            <div style={{ whiteSpace: 'pre-line' }}>{settings.footer_terms}</div>
+          ) : (
+            <>
+              <div>LOOSE ITEMS, VACCINES, INHALERS AND</div>
+              <div>FRIDGE ITEMS WILL NOT BE RETURNED.</div>
+            </>
+          )}
+          {settings.thank_you_msg ? (
+            <div style={{ marginTop: '4px', fontWeight: 'bold' }}>{settings.thank_you_msg}</div>
+          ) : null}
         </div>
       </div>
 

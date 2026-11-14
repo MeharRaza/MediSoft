@@ -67,6 +67,7 @@ const navItems = [
     label: 'Settings', icon: 'settings',
     children: [
       { label: 'Company', path: '/settings/company', icon: 'business' },
+      { label: 'Invoice Print', path: '/settings/invoice', icon: 'receipt_long' },
       { label: 'Users', path: '/settings/users', icon: 'group' },
       { label: 'Branches', path: '/settings/branches', icon: 'store' },
     ]

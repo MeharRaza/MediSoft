@@ -132,6 +132,8 @@ contextBridge.exposeInMainWorld('api', {
     updateBranch:    (data) => ipcRenderer.invoke('settings:updateBranch', data),
     getCompanyInfo:  () => ipcRenderer.invoke('settings:getCompanyInfo'),
     saveCompanyInfo: (data) => ipcRenderer.invoke('settings:saveCompanyInfo', data),
+    getInvoiceSettings:  () => ipcRenderer.invoke('settings:getInvoiceSettings'),
+    saveInvoiceSettings: (data) => ipcRenderer.invoke('settings:saveInvoiceSettings', data),
     login:           (data) => ipcRenderer.invoke('settings:login', data),
     getCurrentUser:  () => ipcRenderer.invoke('settings:getCurrentUser'),
     logout:          () => ipcRenderer.invoke('settings:logout'),

@@ -35,6 +35,7 @@ import ProfitLoss from './pages/reports/ProfitLoss'
 import Expenses from './pages/reports/Expenses'
 import ExpiryReport from './pages/reports/ExpiryReport'
 import CompanySettings from './pages/settings/CompanySettings'
+import InvoiceSettings from './pages/settings/InvoiceSettings'
 import UserManagement from './pages/settings/UserManagement'
 import BranchManagement from './pages/settings/BranchManagement'
 
@@ -141,6 +142,7 @@ export default function App() {
           <Route path="reports/expiry"   element={<ExpiryReport />} />
           {/* Settings */}
           <Route path="settings/company"  element={<CompanySettings />} />
+          <Route path="settings/invoice"  element={<InvoiceSettings />} />
           <Route path="settings/users"    element={<UserManagement />} />
           <Route path="settings/branches" element={<BranchManagement />} />
         </Route>

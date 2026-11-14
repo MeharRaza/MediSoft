@@ -260,6 +260,7 @@ function createWindow() {
     logDebug('mainWindow ready-to-show fired')
     mainWindow.show()
     mainWindow.maximize()
+    mainWindow.focus()
   })
 
   mainWindow.on('closed', () => { mainWindow = null })

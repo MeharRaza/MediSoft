@@ -154,7 +154,18 @@ export const api = {
         footer_terms: 'LOOSE ITEMS, VACCINES, INHALERS AND FRIDGE ITEMS WILL NOT BE RETURNED.',
         thank_you_msg: 'Thank You For Your Visit!',
         show_discount_col: 0,
-        show_customer_name: 1
+        show_customer_name: 1,
+        header_bold: 0,
+        tagline_bold: 0,
+        address_bold: 0,
+        phone_bold: 0,
+        meta_bold: 0,
+        table_header_bold: 0,
+        item_bold: 0,
+        total_bold: 0,
+        net_total_bold: 1,
+        footer_terms_bold: 0,
+        thank_you_bold: 0
       })
     },
     saveInvoiceSettings: (data) => {

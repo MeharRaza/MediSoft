@@ -3,6 +3,25 @@ import { api } from '../../lib/api'
 import { PageHeader, Card, Btn, Input } from '../../components/ui'
 import InvoicePrint from '../../components/InvoicePrint'
 
+function BoldToggle({ value, onChange, label }) {
+  const isBold = Boolean(value)
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(isBold ? 0 : 1)}
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold border transition-all select-none ${
+        isBold
+          ? 'bg-[#003c90] text-white border-[#003c90] shadow-sm'
+          : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-100 hover:text-gray-900'
+      }`}
+      title={label ? `${label}: ${isBold ? 'Bold (On)' : 'Unbold'}` : 'Toggle Bold'}
+    >
+      <span className={`text-[12px] leading-none ${isBold ? 'font-black' : 'font-normal'}`}>B</span>
+      <span>{isBold ? 'Bold' : 'Unbold'}</span>
+    </button>
+  )
+}
+
 export default function InvoiceSettings() {
   const [form, setForm] = useState({
     store_name: 'Harmain Medical Store',
@@ -20,7 +39,18 @@ export default function InvoiceSettings() {
     footer_terms: 'LOOSE ITEMS, VACCINES, INHALERS AND\nFRIDGE ITEMS WILL NOT BE RETURNED.',
     thank_you_msg: 'Thank You For Your Visit!',
     show_discount_col: 0,
-    show_customer_name: 1
+    show_customer_name: 1,
+    header_bold: 0,
+    tagline_bold: 0,
+    address_bold: 0,
+    phone_bold: 0,
+    meta_bold: 0,
+    table_header_bold: 0,
+    item_bold: 0,
+    total_bold: 0,
+    net_total_bold: 1,
+    footer_terms_bold: 0,
+    thank_you_bold: 0
   })
 
   const [loading, setLoading] = useState(true)
@@ -58,7 +88,18 @@ export default function InvoiceSettings() {
           net_total_font_size: Number(s.net_total_font_size) || 16,
           footer_font_size: Number(s.footer_font_size) || 10,
           show_discount_col: s.show_discount_col ?? 0,
-          show_customer_name: s.show_customer_name ?? 1
+          show_customer_name: s.show_customer_name ?? 1,
+          header_bold: s.header_bold !== undefined ? (s.header_bold ? 1 : 0) : prev.header_bold,
+          tagline_bold: s.tagline_bold !== undefined ? (s.tagline_bold ? 1 : 0) : prev.tagline_bold,
+          address_bold: s.address_bold !== undefined ? (s.address_bold ? 1 : 0) : prev.address_bold,
+          phone_bold: s.phone_bold !== undefined ? (s.phone_bold ? 1 : 0) : prev.phone_bold,
+          meta_bold: s.meta_bold !== undefined ? (s.meta_bold ? 1 : 0) : prev.meta_bold,
+          table_header_bold: s.table_header_bold !== undefined ? (s.table_header_bold ? 1 : 0) : prev.table_header_bold,
+          item_bold: s.item_bold !== undefined ? (s.item_bold ? 1 : 0) : prev.item_bold,
+          total_bold: s.total_bold !== undefined ? (s.total_bold ? 1 : 0) : prev.total_bold,
+          net_total_bold: s.net_total_bold !== undefined ? (s.net_total_bold ? 1 : 0) : prev.net_total_bold,
+          footer_terms_bold: s.footer_terms_bold !== undefined ? (s.footer_terms_bold ? 1 : 0) : prev.footer_terms_bold,
+          thank_you_bold: s.thank_you_bold !== undefined ? (s.thank_you_bold ? 1 : 0) : prev.thank_you_bold
         }))
       }
       setLoading(false)
@@ -129,7 +170,18 @@ export default function InvoiceSettings() {
       footer_terms: 'LOOSE ITEMS, VACCINES, INHALERS AND\nFRIDGE ITEMS WILL NOT BE RETURNED.',
       thank_you_msg: 'Thank You For Your Visit!',
       show_discount_col: 0,
-      show_customer_name: 1
+      show_customer_name: 1,
+      header_bold: 0,
+      tagline_bold: 0,
+      address_bold: 0,
+      phone_bold: 0,
+      meta_bold: 0,
+      table_header_bold: 0,
+      item_bold: 0,
+      total_bold: 0,
+      net_total_bold: 1,
+      footer_terms_bold: 0,
+      thank_you_bold: 0
     }
     setForm(defaults)
     try { localStorage.setItem('invoice_settings_cache', JSON.stringify(defaults)) } catch (e) {}
@@ -184,9 +236,12 @@ export default function InvoiceSettings() {
               </div>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-[12px] font-bold text-[#334155] mb-1">
-                    Store / Pharmacy Name <span className="text-red-500">*</span>
-                  </label>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-[12px] font-bold text-[#334155]">
+                      Store / Pharmacy Name <span className="text-red-500">*</span>
+                    </label>
+                    <BoldToggle value={form.header_bold} onChange={v => handleChange('header_bold', v)} label="Store Name" />
+                  </div>
                   <Input 
                     value={form.store_name}
                     onChange={e => handleChange('store_name', e.target.value)}
@@ -197,9 +252,12 @@ export default function InvoiceSettings() {
                 </div>
 
                 <div>
-                  <label className="block text-[12px] font-bold text-[#334155] mb-1">
-                    Sub-title / Tagline <span className="text-[11px] font-normal text-gray-500">(Optional)</span>
-                  </label>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-[12px] font-bold text-[#334155]">
+                      Sub-title / Tagline <span className="text-[11px] font-normal text-gray-500">(Optional)</span>
+                    </label>
+                    <BoldToggle value={form.tagline_bold} onChange={v => handleChange('tagline_bold', v)} label="Tagline" />
+                  </div>
                   <Input 
                     value={form.tagline}
                     onChange={e => handleChange('tagline', e.target.value)}
@@ -208,9 +266,12 @@ export default function InvoiceSettings() {
                 </div>
 
                 <div>
-                  <label className="block text-[12px] font-bold text-[#334155] mb-1">
-                    Store Address
-                  </label>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-[12px] font-bold text-[#334155]">
+                      Store Address
+                    </label>
+                    <BoldToggle value={form.address_bold} onChange={v => handleChange('address_bold', v)} label="Address" />
+                  </div>
                   <Input 
                     value={form.address}
                     onChange={e => handleChange('address', e.target.value)}
@@ -219,9 +280,12 @@ export default function InvoiceSettings() {
                 </div>
 
                 <div>
-                  <label className="block text-[12px] font-bold text-[#334155] mb-1">
-                    Phone / Contact Number
-                  </label>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-[12px] font-bold text-[#334155]">
+                      Phone / Contact Number
+                    </label>
+                    <BoldToggle value={form.phone_bold} onChange={v => handleChange('phone_bold', v)} label="Phone" />
+                  </div>
                   <Input 
                     value={form.phone}
                     onChange={e => handleChange('phone', e.target.value)}
@@ -278,16 +342,9 @@ export default function InvoiceSettings() {
                   </div>
                 </div>
 
-                <div className="pt-2">
-                  <label className="flex items-center gap-2 cursor-pointer text-[13px] font-medium text-[#334155]">
-                    <input 
-                      type="checkbox"
-                      checked={!!form.show_discount_col}
-                      onChange={e => handleChange('show_discount_col', e.target.checked ? 1 : 0)}
-                      className="w-4 h-4 text-[#003c90] rounded border-gray-300 focus:ring-[#003c90]"
-                    />
-                    <span>Show separate "Disc" (Discount) column in items list</span>
-                  </label>
+                <div className="pt-2 text-[12px] text-gray-500 bg-blue-50/50 p-2.5 rounded-lg border border-blue-100 flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[18px] text-[#003c90]">info</span>
+                  <span><strong>Automatic Disc Column:</strong> Receipt par "Disc" column sirf tab show hoga jab kisi item par specific discount diya jaye ga. Baghair discount ke clean 4 columns rahengay.</span>
                 </div>
               </div>
             </Card>
@@ -309,9 +366,12 @@ export default function InvoiceSettings() {
                 <div>
                   <div className="flex justify-between items-center mb-1.5">
                     <label className="text-[12px] font-bold text-[#334155]">Store Name Size (Title)</label>
-                    <span className="text-[12px] font-mono font-bold text-[#003c90] bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
-                      {form.header_font_size} px
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <BoldToggle value={form.header_bold} onChange={v => handleChange('header_bold', v)} label="Store Name" />
+                      <span className="text-[12px] font-mono font-bold text-[#003c90] bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                        {form.header_font_size} px
+                      </span>
+                    </div>
                   </div>
                   <input 
                     type="range" 
@@ -333,9 +393,12 @@ export default function InvoiceSettings() {
                 <div>
                   <div className="flex justify-between items-center mb-1.5">
                     <label className="text-[12px] font-bold text-[#334155]">Address & Phone Size</label>
-                    <span className="text-[12px] font-mono font-bold text-[#003c90] bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
-                      {form.address_font_size} px
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <BoldToggle value={form.address_bold} onChange={v => handleChange('address_bold', v)} label="Address" />
+                      <span className="text-[12px] font-mono font-bold text-[#003c90] bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                        {form.address_font_size} px
+                      </span>
+                    </div>
                   </div>
                   <input 
                     type="range" 
@@ -353,13 +416,34 @@ export default function InvoiceSettings() {
                   </div>
                 </div>
 
+                {/* Invoice Details (No, Date, Customer) */}
+                <div className="p-3 bg-gray-50/80 rounded-lg border border-gray-200 flex justify-between items-center">
+                  <div>
+                    <div className="text-[12px] font-bold text-[#334155]">Invoice Info (No. INV, Date, Customer)</div>
+                    <div className="text-[11px] text-gray-500">Details row right below header</div>
+                  </div>
+                  <BoldToggle value={form.meta_bold} onChange={v => handleChange('meta_bold', v)} label="Invoice Info" />
+                </div>
+
+                {/* Table Header Row */}
+                <div className="p-3 bg-gray-50/80 rounded-lg border border-gray-200 flex justify-between items-center">
+                  <div>
+                    <div className="text-[12px] font-bold text-[#334155]">Table Header (Item Name, Qty, Price, Total)</div>
+                    <div className="text-[11px] text-gray-500">Items table column titles row</div>
+                  </div>
+                  <BoldToggle value={form.table_header_bold} onChange={v => handleChange('table_header_bold', v)} label="Table Header" />
+                </div>
+
                 {/* Items Table Font Size */}
                 <div>
                   <div className="flex justify-between items-center mb-1.5">
-                    <label className="text-[12px] font-bold text-[#334155]">Medicines & Items Table Size</label>
-                    <span className="text-[12px] font-mono font-bold text-[#003c90] bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
-                      {form.item_font_size} px
-                    </span>
+                    <label className="text-[12px] font-bold text-[#334155]">Medicines & Items Names</label>
+                    <div className="flex items-center gap-2">
+                      <BoldToggle value={form.item_bold} onChange={v => handleChange('item_bold', v)} label="Items" />
+                      <span className="text-[12px] font-mono font-bold text-[#003c90] bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                        {form.item_font_size} px
+                      </span>
+                    </div>
                   </div>
                   <input 
                     type="range" 
@@ -380,10 +464,13 @@ export default function InvoiceSettings() {
                 {/* Totals Font Size */}
                 <div>
                   <div className="flex justify-between items-center mb-1.5">
-                    <label className="text-[12px] font-bold text-[#334155]">Gross & Net Total Size</label>
-                    <span className="text-[12px] font-mono font-bold text-[#003c90] bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
-                      {form.total_font_size} px
-                    </span>
+                    <label className="text-[12px] font-bold text-[#334155]">Gross Total & Discount</label>
+                    <div className="flex items-center gap-2">
+                      <BoldToggle value={form.total_bold} onChange={v => handleChange('total_bold', v)} label="Totals" />
+                      <span className="text-[12px] font-mono font-bold text-[#003c90] bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                        {form.total_font_size} px
+                      </span>
+                    </div>
                   </div>
                   <input 
                     type="range" 
@@ -401,13 +488,25 @@ export default function InvoiceSettings() {
                   </div>
                 </div>
 
+                {/* Net Total Row */}
+                <div className="p-3 bg-gray-50/80 rounded-lg border border-gray-200 flex justify-between items-center">
+                  <div>
+                    <div className="text-[12px] font-bold text-[#334155]">Net Total (Final Amount)</div>
+                    <div className="text-[11px] text-gray-500">Highlighted final bill amount row</div>
+                  </div>
+                  <BoldToggle value={form.net_total_bold} onChange={v => handleChange('net_total_bold', v)} label="Net Total" />
+                </div>
+
                 {/* Footer Notice Font Size */}
                 <div>
                   <div className="flex justify-between items-center mb-1.5">
                     <label className="text-[12px] font-bold text-[#334155]">Footer Notice / Policy Size</label>
-                    <span className="text-[12px] font-mono font-bold text-[#003c90] bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
-                      {form.footer_font_size} px
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <BoldToggle value={form.footer_terms_bold} onChange={v => handleChange('footer_terms_bold', v)} label="Footer Policy" />
+                      <span className="text-[12px] font-mono font-bold text-[#003c90] bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                        {form.footer_font_size} px
+                      </span>
+                    </div>
                   </div>
                   <input 
                     type="range" 
@@ -435,9 +534,12 @@ export default function InvoiceSettings() {
               </div>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-[12px] font-bold text-[#334155] mb-1">
-                    Return Policy / Notice
-                  </label>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-[12px] font-bold text-[#334155]">
+                      Return Policy / Notice
+                    </label>
+                    <BoldToggle value={form.footer_terms_bold} onChange={v => handleChange('footer_terms_bold', v)} label="Policy Notice" />
+                  </div>
                   <textarea 
                     rows="3"
                     value={form.footer_terms}
@@ -449,9 +551,12 @@ export default function InvoiceSettings() {
                 </div>
 
                 <div>
-                  <label className="block text-[12px] font-bold text-[#334155] mb-1">
-                    Thank You Message
-                  </label>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-[12px] font-bold text-[#334155]">
+                      Thank You Message
+                    </label>
+                    <BoldToggle value={form.thank_you_bold} onChange={v => handleChange('thank_you_bold', v)} label="Thank You Msg" />
+                  </div>
                   <Input 
                     value={form.thank_you_msg}
                     onChange={e => handleChange('thank_you_msg', e.target.value)}
@@ -483,7 +588,7 @@ export default function InvoiceSettings() {
             <div className="bg-slate-800 text-white px-4 py-2.5 rounded-t-xl flex items-center justify-between text-[12px] font-bold shadow-md">
               <span className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                Live 85mm Thermal Slip Preview
+                Live Thermal Slip Preview
               </span>
               <span className="text-[11px] text-slate-300 font-mono">
                 {form.paper_width}
@@ -511,7 +616,7 @@ export default function InvoiceSettings() {
                 <div 
                   style={{
                     textAlign: 'center',
-                    fontWeight: 'bold',
+                    fontWeight: form.header_bold ? 'bold' : 'normal',
                     fontSize: `${form.header_font_size}px`,
                     letterSpacing: '0.2px',
                     wordBreak: 'break-word',
@@ -521,11 +626,27 @@ export default function InvoiceSettings() {
                   {form.store_name || 'Harmain Medical Store'}
                 </div>
 
+                {/* Tagline */}
+                {form.tagline ? (
+                  <div 
+                    style={{
+                      textAlign: 'center',
+                      fontSize: `${form.address_font_size - 1}px`,
+                      fontWeight: form.tagline_bold ? 'bold' : 'normal',
+                      fontStyle: 'italic',
+                      marginTop: '1px'
+                    }}
+                  >
+                    {form.tagline}
+                  </div>
+                ) : null}
+
                 {/* Address */}
                 <div 
                   style={{
                     textAlign: 'center',
                     fontSize: `${form.address_font_size}px`,
+                    fontWeight: form.address_bold ? 'bold' : 'normal',
                     marginTop: '2px',
                     lineHeight: 1.3
                   }}
@@ -538,6 +659,7 @@ export default function InvoiceSettings() {
                   style={{
                     textAlign: 'center',
                     fontSize: `${form.address_font_size}px`,
+                    fontWeight: form.phone_bold ? 'bold' : 'normal',
                     marginTop: '2px',
                     lineHeight: 1.3
                   }}
@@ -549,24 +671,24 @@ export default function InvoiceSettings() {
                 <div style={{ borderTop: '1px dashed #000', margin: '4px 0' }}></div>
 
                 {/* Invoice Meta */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: `${form.meta_font_size}px` }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: `${form.meta_font_size}px`, fontWeight: form.meta_bold ? 'bold' : 'normal' }}>
                   <span>No. INV-15666</span>
                   <span>14/11/2026 13:16</span>
                 </div>
-                <div style={{ fontSize: `${form.meta_font_size}px`, marginTop: '1px' }}>
+                <div style={{ fontSize: `${form.meta_font_size}px`, fontWeight: form.meta_bold ? 'bold' : 'normal', marginTop: '1px' }}>
                   M/a: Walk-in Customer
                 </div>
 
                 {/* Divider Line */}
                 <div style={{ borderTop: '1px dashed #000', margin: '4px 0' }}></div>
 
-                {/* Table Header */}
+                {/* Table Header (clean 4 cols because sample invoice has no per-item discount) */}
                 <div 
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: form.show_discount_col ? '38% 12% 16% 16% 18%' : '48% 14% 18% 20%',
+                    gridTemplateColumns: '48% 14% 18% 20%',
                     fontSize: `${(Number(form.item_font_size) || 12.5) + 0.5}px`,
-                    fontWeight: 'bold',
+                    fontWeight: form.table_header_bold ? 'bold' : 'normal',
                     marginBottom: '3px',
                     lineHeight: 1.3
                   }}
@@ -574,106 +696,43 @@ export default function InvoiceSettings() {
                   <div>Item Name</div>
                   <div style={{ textAlign: 'right' }}>Qty</div>
                   <div style={{ textAlign: 'right' }}>Price</div>
-                  {Boolean(form.show_discount_col) && <div style={{ textAlign: 'right' }}>Disc</div>}
                   <div style={{ textAlign: 'right' }}>Total</div>
                 </div>
 
-                {/* Sample Items (matching user receipt photo!) */}
+                {/* Sample Items */}
                 <div style={{ fontSize: `${form.item_font_size}px` }}>
-                  {/* Item 1 */}
-                  <div 
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: form.show_discount_col ? '38% 12% 16% 16% 18%' : '48% 14% 18% 20%',
-                      marginBottom: '3px',
-                      lineHeight: 1.3
-                    }}
-                  >
-                    <div style={{ wordBreak: 'break-word', paddingRight: '2px', fontWeight: '500' }}>OMEGA 20MG CAP</div>
-                    <div style={{ textAlign: 'right' }}>3</div>
-                    <div style={{ textAlign: 'right' }}>27.86</div>
-                    {Boolean(form.show_discount_col) && <div style={{ textAlign: 'right' }}>-</div>}
-                    <div style={{ textAlign: 'right', fontWeight: 'bold' }}>83.57</div>
-                  </div>
-
-                  {/* Item 2 */}
-                  <div 
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: form.show_discount_col ? '38% 12% 16% 16% 18%' : '48% 14% 18% 20%',
-                      marginBottom: '3px',
-                      lineHeight: 1.3
-                    }}
-                  >
-                    <div style={{ wordBreak: 'break-word', paddingRight: '2px', fontWeight: '500' }}>KESTINE 10MG TAB</div>
-                    <div style={{ textAlign: 'right' }}>3</div>
-                    <div style={{ textAlign: 'right' }}>21.24</div>
-                    {Boolean(form.show_discount_col) && <div style={{ textAlign: 'right' }}>-</div>}
-                    <div style={{ textAlign: 'right', fontWeight: 'bold' }}>63.71</div>
-                  </div>
-
-                  {/* Item 3 */}
-                  <div 
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: form.show_discount_col ? '38% 12% 16% 16% 18%' : '48% 14% 18% 20%',
-                      marginBottom: '3px',
-                      lineHeight: 1.3
-                    }}
-                  >
-                    <div style={{ wordBreak: 'break-word', paddingRight: '2px', fontWeight: '500' }}>MYTEKA 10MG TAB</div>
-                    <div style={{ textAlign: 'right' }}>3</div>
-                    <div style={{ textAlign: 'right' }}>39.57</div>
-                    {Boolean(form.show_discount_col) && <div style={{ textAlign: 'right' }}>-</div>}
-                    <div style={{ textAlign: 'right', fontWeight: 'bold' }}>118.71</div>
-                  </div>
-
-                  {/* Item 4 */}
-                  <div 
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: form.show_discount_col ? '38% 12% 16% 16% 18%' : '48% 14% 18% 20%',
-                      marginBottom: '3px',
-                      lineHeight: 1.3
-                    }}
-                  >
-                    <div style={{ wordBreak: 'break-word', paddingRight: '2px', fontWeight: '500' }}>DR KOFF CANDY(RS#10)</div>
-                    <div style={{ textAlign: 'right' }}>10</div>
-                    <div style={{ textAlign: 'right' }}>10.00</div>
-                    {Boolean(form.show_discount_col) && <div style={{ textAlign: 'right' }}>-</div>}
-                    <div style={{ textAlign: 'right', fontWeight: 'bold' }}>100.00</div>
-                  </div>
-
-                  {/* Item 5 */}
-                  <div 
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: form.show_discount_col ? '38% 12% 16% 16% 18%' : '48% 14% 18% 20%',
-                      marginBottom: '3px',
-                      lineHeight: 1.3
-                    }}
-                  >
-                    <div style={{ wordBreak: 'break-word', paddingRight: '2px', fontWeight: '500' }}>GOURMET 1.5 LTR (LEMON)</div>
-                    <div style={{ textAlign: 'right' }}>1</div>
-                    <div style={{ textAlign: 'right' }}>160.00</div>
-                    {Boolean(form.show_discount_col) && <div style={{ textAlign: 'right' }}>-</div>}
-                    <div style={{ textAlign: 'right', fontWeight: 'bold' }}>160.00</div>
-                  </div>
+                  {sampleInvoice.items.map((item, idx) => (
+                    <div 
+                      key={idx}
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: '48% 14% 18% 20%',
+                        marginBottom: '3px',
+                        lineHeight: 1.3,
+                        fontWeight: form.item_bold ? 'bold' : 'normal'
+                      }}
+                    >
+                      <div style={{ wordBreak: 'break-word', paddingRight: '2px' }}>{item.product_name}</div>
+                      <div style={{ textAlign: 'right' }}>{item.qty}</div>
+                      <div style={{ textAlign: 'right' }}>{item.sale_price.toFixed(2)}</div>
+                      <div style={{ textAlign: 'right' }}>{item.total.toFixed(2)}</div>
+                    </div>
+                  ))}
                 </div>
 
                 {/* Divider Line */}
                 <div style={{ borderTop: '1px dashed #000', margin: '4px 0' }}></div>
 
                 {/* Gross Total */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: `${form.total_font_size}px`, margin: '2px 0' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: `${form.total_font_size}px`, fontWeight: form.total_bold ? 'bold' : 'normal', margin: '2px 0' }}>
                   <span style={{ flex: 1, textAlign: 'center' }}>Gross Total:</span>
-                  <span style={{ textAlign: 'right', minWidth: '85px', fontWeight: 'bold' }}>525.99</span>
+                  <span style={{ textAlign: 'right', minWidth: '85px' }}>525.99</span>
                 </div>
 
                 {/* Discount */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: `${form.total_font_size}px`, margin: '2px 0' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: `${form.total_font_size}px`, fontWeight: form.total_bold ? 'bold' : 'normal', margin: '2px 0' }}>
                   <span style={{ flex: 1, textAlign: 'center' }}>Discount:</span>
-                  <span style={{ textAlign: 'right', minWidth: '85px', fontWeight: 'bold' }}>26.30</span>
+                  <span style={{ textAlign: 'right', minWidth: '85px' }}>26.30</span>
                 </div>
 
                 {/* Divider Line */}
@@ -685,7 +744,7 @@ export default function InvoiceSettings() {
                     display: 'flex',
                     justifyContent: 'space-between',
                     fontSize: `${form.net_total_font_size || 16}px`,
-                    fontWeight: 'bold',
+                    fontWeight: form.net_total_bold ? 'bold' : 'normal',
                     margin: '3px 0'
                   }}
                 >
@@ -706,10 +765,14 @@ export default function InvoiceSettings() {
                   }}
                 >
                   {form.footer_terms ? (
-                    <div style={{ whiteSpace: 'pre-line' }}>{form.footer_terms}</div>
+                    <div style={{ whiteSpace: 'pre-line', fontWeight: form.footer_terms_bold ? 'bold' : 'normal' }}>
+                      {form.footer_terms}
+                    </div>
                   ) : null}
                   {form.thank_you_msg ? (
-                    <div style={{ marginTop: '4px', fontWeight: 'bold' }}>{form.thank_you_msg}</div>
+                    <div style={{ marginTop: '4px', fontWeight: form.thank_you_bold ? 'bold' : 'normal' }}>
+                      {form.thank_you_msg}
+                    </div>
                   ) : null}
                 </div>
               </div>

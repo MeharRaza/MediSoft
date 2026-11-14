@@ -157,6 +157,18 @@ module.exports = (ipcMain) => {
         VALUES (1, 'Harmain Medical Store', 'Opposite Nadra Kiosik Main Bazar Raiwind', '03228684603');
       `)
 
+      // Ensure bold columns exist
+      const boldCols = [
+        'header_bold', 'tagline_bold', 'address_bold', 'phone_bold',
+        'meta_bold', 'table_header_bold', 'item_bold', 'total_bold',
+        'net_total_bold', 'footer_terms_bold', 'thank_you_bold'
+      ]
+      for (const col of boldCols) {
+        try {
+          db.prepare(`ALTER TABLE invoice_settings ADD COLUMN ${col} INTEGER DEFAULT 0`).run()
+        } catch (e) {}
+      }
+
       const row = db.prepare('SELECT * FROM invoice_settings WHERE id = 1').get()
       if (row) {
         return {
@@ -167,7 +179,18 @@ module.exports = (ipcMain) => {
           item_font_size: Number(row.item_font_size) || 12.5,
           total_font_size: Number(row.total_font_size) || 13,
           net_total_font_size: Number(row.net_total_font_size) || 16,
-          footer_font_size: Number(row.footer_font_size) || 10
+          footer_font_size: Number(row.footer_font_size) || 10,
+          header_bold: row.header_bold ? 1 : 0,
+          tagline_bold: row.tagline_bold ? 1 : 0,
+          address_bold: row.address_bold ? 1 : 0,
+          phone_bold: row.phone_bold ? 1 : 0,
+          meta_bold: row.meta_bold ? 1 : 0,
+          table_header_bold: row.table_header_bold ? 1 : 0,
+          item_bold: row.item_bold ? 1 : 0,
+          total_bold: row.total_bold ? 1 : 0,
+          net_total_bold: row.net_total_bold ? 1 : 0,
+          footer_terms_bold: row.footer_terms_bold ? 1 : 0,
+          thank_you_bold: row.thank_you_bold ? 1 : 0
         }
       }
 
@@ -189,7 +212,18 @@ module.exports = (ipcMain) => {
         footer_terms: 'LOOSE ITEMS, VACCINES, INHALERS AND FRIDGE ITEMS WILL NOT BE RETURNED.',
         thank_you_msg: 'Thank You For Your Visit!',
         show_discount_col: 0,
-        show_customer_name: 1
+        show_customer_name: 1,
+        header_bold: 0,
+        tagline_bold: 0,
+        address_bold: 0,
+        phone_bold: 0,
+        meta_bold: 0,
+        table_header_bold: 0,
+        item_bold: 0,
+        total_bold: 0,
+        net_total_bold: 1,
+        footer_terms_bold: 0,
+        thank_you_bold: 0
       }
     } catch (err) {
       console.error('[Settings] getInvoiceSettings error:', err)
@@ -199,15 +233,33 @@ module.exports = (ipcMain) => {
 
   ipcMain.handle('settings:saveInvoiceSettings', (_, data) => {
     try {
+      // Ensure bold columns exist
+      const boldCols = [
+        'header_bold', 'tagline_bold', 'address_bold', 'phone_bold',
+        'meta_bold', 'table_header_bold', 'item_bold', 'total_bold',
+        'net_total_bold', 'footer_terms_bold', 'thank_you_bold'
+      ]
+      for (const col of boldCols) {
+        try {
+          db.prepare(`ALTER TABLE invoice_settings ADD COLUMN ${col} INTEGER DEFAULT 0`).run()
+        } catch (e) {}
+      }
+
       db.prepare(`
         INSERT INTO invoice_settings (
           id, store_name, tagline, address, phone, paper_width,
           header_font_size, address_font_size, meta_font_size, item_font_size, total_font_size, net_total_font_size, footer_font_size,
-          footer_terms, thank_you_msg, show_discount_col, show_customer_name, updated_at
+          footer_terms, thank_you_msg, show_discount_col, show_customer_name,
+          header_bold, tagline_bold, address_bold, phone_bold, meta_bold, table_header_bold,
+          item_bold, total_bold, net_total_bold, footer_terms_bold, thank_you_bold,
+          updated_at
         ) VALUES (
           1, ?, ?, ?, ?, ?,
           ?, ?, ?, ?, ?, ?, ?,
-          ?, ?, ?, ?, datetime('now', 'localtime')
+          ?, ?, ?, ?,
+          ?, ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?,
+          datetime('now', 'localtime')
         )
         ON CONFLICT(id) DO UPDATE SET
           store_name = excluded.store_name,
@@ -226,6 +278,17 @@ module.exports = (ipcMain) => {
           thank_you_msg = excluded.thank_you_msg,
           show_discount_col = excluded.show_discount_col,
           show_customer_name = excluded.show_customer_name,
+          header_bold = excluded.header_bold,
+          tagline_bold = excluded.tagline_bold,
+          address_bold = excluded.address_bold,
+          phone_bold = excluded.phone_bold,
+          meta_bold = excluded.meta_bold,
+          table_header_bold = excluded.table_header_bold,
+          item_bold = excluded.item_bold,
+          total_bold = excluded.total_bold,
+          net_total_bold = excluded.net_total_bold,
+          footer_terms_bold = excluded.footer_terms_bold,
+          thank_you_bold = excluded.thank_you_bold,
           updated_at = datetime('now', 'localtime')
       `).run(
         data.store_name || 'Harmain Medical Store',
@@ -243,7 +306,18 @@ module.exports = (ipcMain) => {
         data.footer_terms ?? 'LOOSE ITEMS, VACCINES, INHALERS AND FRIDGE ITEMS WILL NOT BE RETURNED.',
         data.thank_you_msg ?? 'Thank You For Your Visit!',
         data.show_discount_col ? 1 : 0,
-        data.show_customer_name ? 1 : 0
+        data.show_customer_name ? 1 : 0,
+        data.header_bold ? 1 : 0,
+        data.tagline_bold ? 1 : 0,
+        data.address_bold ? 1 : 0,
+        data.phone_bold ? 1 : 0,
+        data.meta_bold ? 1 : 0,
+        data.table_header_bold ? 1 : 0,
+        data.item_bold ? 1 : 0,
+        data.total_bold ? 1 : 0,
+        data.net_total_bold ? 1 : 0,
+        data.footer_terms_bold ? 1 : 0,
+        data.thank_you_bold ? 1 : 0
       )
 
       // Keep company table name, address, phone in sync

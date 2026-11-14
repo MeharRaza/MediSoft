@@ -6,6 +6,7 @@ import { api } from '../lib/api'
 const getInitialSettings = () => {
   const fallback = {
     store_name: 'Harmain Medical Store',
+    tagline: '',
     address: 'Opposite Nadra Kiosik Main Bazar Raiwind',
     phone: '03228684603',
     header_font_size: 19,
@@ -16,7 +17,18 @@ const getInitialSettings = () => {
     net_total_font_size: 16,
     footer_font_size: 10,
     footer_terms: 'LOOSE ITEMS, VACCINES, INHALERS AND\nFRIDGE ITEMS WILL NOT BE RETURNED.',
-    thank_you_msg: 'Thank You For Your Visit!'
+    thank_you_msg: 'Thank You For Your Visit!',
+    header_bold: 0,
+    tagline_bold: 0,
+    address_bold: 0,
+    phone_bold: 0,
+    meta_bold: 0,
+    table_header_bold: 0,
+    item_bold: 0,
+    total_bold: 0,
+    net_total_bold: 1,
+    footer_terms_bold: 0,
+    thank_you_bold: 0
   }
   try {
     const cached = localStorage.getItem('invoice_settings_cache')
@@ -89,6 +101,7 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false, sett
           const merged = {
             ...prev,
             store_name: s.store_name || prev.store_name,
+            tagline: s.tagline || prev.tagline,
             address: s.address || prev.address,
             phone: s.phone || prev.phone,
             header_font_size: Number(s.header_font_size) || prev.header_font_size || 19,
@@ -99,7 +112,18 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false, sett
             net_total_font_size: Number(s.net_total_font_size) || prev.net_total_font_size || 16,
             footer_font_size: Number(s.footer_font_size) || prev.footer_font_size || 10,
             footer_terms: s.footer_terms || prev.footer_terms,
-            thank_you_msg: s.thank_you_msg || prev.thank_you_msg
+            thank_you_msg: s.thank_you_msg || prev.thank_you_msg,
+            header_bold: s.header_bold !== undefined ? (s.header_bold ? 1 : 0) : prev.header_bold,
+            tagline_bold: s.tagline_bold !== undefined ? (s.tagline_bold ? 1 : 0) : prev.tagline_bold,
+            address_bold: s.address_bold !== undefined ? (s.address_bold ? 1 : 0) : prev.address_bold,
+            phone_bold: s.phone_bold !== undefined ? (s.phone_bold ? 1 : 0) : prev.phone_bold,
+            meta_bold: s.meta_bold !== undefined ? (s.meta_bold ? 1 : 0) : prev.meta_bold,
+            table_header_bold: s.table_header_bold !== undefined ? (s.table_header_bold ? 1 : 0) : prev.table_header_bold,
+            item_bold: s.item_bold !== undefined ? (s.item_bold ? 1 : 0) : prev.item_bold,
+            total_bold: s.total_bold !== undefined ? (s.total_bold ? 1 : 0) : prev.total_bold,
+            net_total_bold: s.net_total_bold !== undefined ? (s.net_total_bold ? 1 : 0) : prev.net_total_bold,
+            footer_terms_bold: s.footer_terms_bold !== undefined ? (s.footer_terms_bold ? 1 : 0) : prev.footer_terms_bold,
+            thank_you_bold: s.thank_you_bold !== undefined ? (s.thank_you_bold ? 1 : 0) : prev.thank_you_bold
           }
           try { localStorage.setItem('invoice_settings_cache', JSON.stringify(merged)) } catch (e) {}
           return merged
@@ -200,7 +224,7 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false, sett
   })
 
   const hasItemDiscount = processedItems.some(i => i.discAmt > 0.01)
-  const showDiscountCol = Boolean(settings.show_discount_col || hasItemDiscount)
+  const showDiscountCol = Boolean(hasItemDiscount)
 
   // Totals calculations
   const computedGross = processedItems.reduce((sum, i) => sum + i.base, 0)
@@ -224,24 +248,56 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false, sett
   const renderReceiptContent = () => (
     <>
       {/* Header - Centered */}
-      <div className="center bold" style={{ fontSize: `${settings.header_font_size || 19}px`, lineHeight: 1.25, letterSpacing: '0.2px' }}>
+      <div className="center" style={{ 
+        fontSize: `${settings.header_font_size || 19}px`, 
+        fontWeight: settings.header_bold ? 'bold' : 'normal',
+        lineHeight: 1.25, 
+        letterSpacing: '0.2px' 
+      }}>
         {settings.store_name || 'Harmain Medical Store'}
       </div>
-      <div className="center" style={{ fontSize: `${settings.address_font_size || 13.5}px`, marginTop: '2px', lineHeight: 1.3 }}>
+      {settings.tagline && (
+        <div className="center" style={{ 
+          fontSize: `${(settings.address_font_size || 13.5) - 1}px`, 
+          fontWeight: settings.tagline_bold ? 'bold' : 'normal',
+          fontStyle: 'italic', 
+          marginTop: '1px' 
+        }}>
+          {settings.tagline}
+        </div>
+      )}
+      <div className="center" style={{ 
+        fontSize: `${settings.address_font_size || 13.5}px`, 
+        fontWeight: settings.address_bold ? 'bold' : 'normal',
+        marginTop: '2px', 
+        lineHeight: 1.3 
+      }}>
         {settings.address || 'Opposite Nadra Kiosik Main Bazar Raiwind'}
       </div>
-      <div className="center" style={{ fontSize: `${settings.address_font_size || 13.5}px`, marginTop: '2px', lineHeight: 1.3 }}>
+      <div className="center" style={{ 
+        fontSize: `${settings.address_font_size || 13.5}px`, 
+        fontWeight: settings.phone_bold ? 'bold' : 'normal',
+        marginTop: '2px', 
+        lineHeight: 1.3 
+      }}>
         Phone #: {settings.phone || '03228684603'}
       </div>
       
       <div className="line"></div>
       
       {/* Invoice Details */}
-      <div className="space-between" style={{ fontSize: `${settings.meta_font_size || 12.5}px` }}>
+      <div className="space-between" style={{ 
+        fontSize: `${settings.meta_font_size || 12.5}px`,
+        fontWeight: settings.meta_bold ? 'bold' : 'normal'
+      }}>
         <span>No. {invoice.invoice_no}</span>
         <span>{dateStr} {timeStr}</span>
       </div>
-      <div style={{ fontSize: `${settings.meta_font_size || 12.5}px`, marginTop: '1px' }}>
+      <div style={{ 
+        fontSize: `${settings.meta_font_size || 12.5}px`, 
+        fontWeight: settings.meta_bold ? 'bold' : 'normal',
+        marginTop: '1px' 
+      }}>
         M/a: {invoice.customer_name || 'Walk-in Customer'}
       </div>
       
@@ -253,7 +309,7 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false, sett
         gridTemplateColumns: showDiscountCol ? '38% 12% 16% 16% 18%' : '48% 14% 18% 20%',
         fontSize: `${(Number(settings.item_font_size) || 12.5) + 0.5}px`,
         marginBottom: '3px',
-        fontWeight: 'bold',
+        fontWeight: settings.table_header_bold ? 'bold' : 'normal',
         lineHeight: 1.3
       }}>
         <div>Item Name</div>
@@ -269,10 +325,11 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false, sett
           display: 'grid',
           gridTemplateColumns: showDiscountCol ? '38% 12% 16% 16% 18%' : '48% 14% 18% 20%',
           fontSize: `${settings.item_font_size || 12.5}px`,
+          fontWeight: settings.item_bold ? 'bold' : 'normal',
           marginBottom: '3px',
           lineHeight: 1.3
         }}>
-          <div style={{ wordBreak: 'break-word', paddingRight: '2px', fontWeight: '500' }}>{item.product_name}</div>
+          <div style={{ wordBreak: 'break-word', paddingRight: '2px' }}>{item.product_name}</div>
           <div style={{ textAlign: 'right' }}>{item.qty}</div>
           <div style={{ textAlign: 'right' }}>{fmt(item.sale_price)}</div>
           {showDiscountCol && (
@@ -280,28 +337,46 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false, sett
               {item.discAmt > 0.01 ? fmt(item.discAmt) : '-'}
             </div>
           )}
-          <div style={{ textAlign: 'right', fontWeight: 'bold' }}>{fmt(item.total)}</div>
+          <div style={{ textAlign: 'right' }}>{fmt(item.total)}</div>
         </div>
       ))}
       
       <div className="line"></div>
       
       {/* Totals - Labels centered, values right-aligned */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: `${settings.total_font_size || 13}px`, margin: '2px 0' }}>
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        fontSize: `${settings.total_font_size || 13}px`, 
+        fontWeight: settings.total_bold ? 'bold' : 'normal',
+        margin: '2px 0' 
+      }}>
         <span style={{ flex: 1, textAlign: 'center' }}>Gross Total:</span>
-        <span style={{ textAlign: 'right', minWidth: '85px', fontWeight: 'bold' }}>{fmt(displayGross)}</span>
+        <span style={{ textAlign: 'right', minWidth: '85px' }}>{fmt(displayGross)}</span>
       </div>
       
       {totalDiscAmt > 0.01 && (
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: `${settings.total_font_size || 13}px`, margin: '2px 0' }}>
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          fontSize: `${settings.total_font_size || 13}px`, 
+          fontWeight: settings.total_bold ? 'bold' : 'normal',
+          margin: '2px 0' 
+        }}>
           <span style={{ flex: 1, textAlign: 'center' }}>Discount:</span>
-          <span style={{ textAlign: 'right', minWidth: '85px', fontWeight: 'bold' }}>{fmt(totalDiscAmt)}</span>
+          <span style={{ textAlign: 'right', minWidth: '85px' }}>{fmt(totalDiscAmt)}</span>
         </div>
       )}
       
       <div className="line"></div>
       
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: `${settings.net_total_font_size || 16}px`, fontWeight: 'bold', margin: '3px 0' }}>
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        fontSize: `${settings.net_total_font_size || 16}px`, 
+        fontWeight: settings.net_total_bold ? 'bold' : 'normal', 
+        margin: '3px 0' 
+      }}>
         <span style={{ flex: 1, textAlign: 'center' }}>Net Total</span>
         <span style={{ textAlign: 'right', minWidth: '90px' }}>{fmt(displayNet)}</span>
       </div>
@@ -311,15 +386,21 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false, sett
       {/* Footer */}
       <div className="center" style={{ fontSize: `${settings.footer_font_size || 10}px`, marginTop: '4px', lineHeight: 1.35 }}>
         {settings.footer_terms ? (
-          <div style={{ whiteSpace: 'pre-line' }}>{settings.footer_terms}</div>
+          <div style={{ whiteSpace: 'pre-line', fontWeight: settings.footer_terms_bold ? 'bold' : 'normal' }}>
+            {settings.footer_terms}
+          </div>
         ) : (
-          <>
+          <div style={{ fontWeight: settings.footer_terms_bold ? 'bold' : 'normal' }}>
             <div>LOOSE ITEMS, VACCINES, INHALERS AND</div>
             <div>FRIDGE ITEMS WILL NOT BE RETURNED.</div>
-          </>
+          </div>
         )}
         {settings.thank_you_msg && (
-          <div style={{ marginTop: '4px', fontWeight: 'bold', fontSize: `${(Number(settings.footer_font_size) || 10) + 0.5}px` }}>
+          <div style={{ 
+            marginTop: '4px', 
+            fontWeight: settings.thank_you_bold ? 'bold' : 'normal', 
+            fontSize: `${(Number(settings.footer_font_size) || 10) + 0.5}px` 
+          }}>
             {settings.thank_you_msg}
           </div>
         )}

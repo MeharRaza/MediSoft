@@ -18,41 +18,40 @@ lQIDAQAB
 
 const API_BASE_URL = 'https://posapi.asiansol.com/api';
 
+let cachedHwid = null;
+
 /**
  * Extracts unique hardware identifiers (Motherboard UUID + CPU ProcessorId)
- * and returns a standard SHA-256 16-character HWID.
+ * and returns a standard SHA-256 16-character HWID. Cached in memory for speed.
  */
 function getHardwareId() {
+  if (cachedHwid) return cachedHwid;
+
   let uuid = '';
   let cpu = '';
 
   try {
-    uuid = execSync('powershell -NoProfile -Command "(Get-CimInstance Win32_ComputerSystemProduct).UUID"', { timeout: 3000 })
-      .toString().trim();
-  } catch (e1) {
+    const rawOut = execSync('powershell -NoProfile -Command "(Get-CimInstance Win32_ComputerSystemProduct).UUID; (Get-CimInstance Win32_Processor).ProcessorId"', { timeout: 4000 })
+      .toString().trim().split(/[\r\n]+/);
+    uuid = rawOut[0]?.trim() || '';
+    cpu = rawOut[1]?.trim() || '';
+  } catch (err) {
     try {
-      uuid = execSync('wmic csproduct get uuid', { timeout: 3000 })
-        .toString().replace(/UUID/i, '').trim();
+      uuid = execSync('wmic csproduct get uuid', { timeout: 1500 }).toString().replace(/UUID/i, '').trim();
+      cpu = execSync('wmic cpu get processorid', { timeout: 1500 }).toString().replace(/ProcessorId/i, '').trim();
     } catch (e2) {
       uuid = 'GENERIC-BOARD-ID';
-    }
-  }
-
-  try {
-    cpu = execSync('powershell -NoProfile -Command "(Get-CimInstance Win32_Processor).ProcessorId"', { timeout: 3000 })
-      .toString().trim();
-  } catch (e1) {
-    try {
-      cpu = execSync('wmic cpu get processorid', { timeout: 3000 })
-        .toString().replace(/ProcessorId/i, '').trim();
-    } catch (e2) {
       cpu = os.cpus()[0]?.model || 'GENERIC-CPU';
     }
   }
 
+  if (!uuid) uuid = 'GENERIC-BOARD-ID';
+  if (!cpu) cpu = os.cpus()[0]?.model || 'GENERIC-CPU';
+
   const raw = `${uuid.toUpperCase()}-${cpu.toUpperCase()}`;
   const hash = crypto.createHash('sha256').update(raw).digest('hex').substring(0, 16).toUpperCase();
-  return `${hash.substring(0, 4)}-${hash.substring(4, 8)}-${hash.substring(8, 12)}-${hash.substring(12, 16)}`;
+  cachedHwid = `${hash.substring(0, 4)}-${hash.substring(4, 8)}-${hash.substring(8, 12)}-${hash.substring(12, 16)}`;
+  return cachedHwid;
 }
 
 /**
@@ -120,15 +119,21 @@ function postJson(url, data) {
 
 module.exports = function registerLicenseIPC(ipcMain, app) {
   const licenseFilePath = path.join(app.getPath('userData'), 'medisoft_license.dat');
+  let cachedLicenseStatus = null;
 
   /**
    * Reads and cryptographically verifies the offline license file.
    */
-  function readAndVerifyLicense() {
+  function readAndVerifyLicense(force = false) {
+    if (!force && cachedLicenseStatus && cachedLicenseStatus.isActivated) {
+      return cachedLicenseStatus;
+    }
+
     const currentHwid = getHardwareId();
 
     if (!fs.existsSync(licenseFilePath)) {
-      return { isActivated: false, hwid: currentHwid };
+      cachedLicenseStatus = { isActivated: false, hwid: currentHwid };
+      return cachedLicenseStatus;
     }
 
     try {
@@ -166,7 +171,7 @@ module.exports = function registerLicenseIPC(ipcMain, app) {
         }
       }
 
-      return {
+      cachedLicenseStatus = {
         isActivated: true,
         hwid: currentHwid,
         license: {
@@ -179,9 +184,11 @@ module.exports = function registerLicenseIPC(ipcMain, app) {
           expiresAt: payload.expiresAt || 'Lifetime'
         }
       };
+      return cachedLicenseStatus;
     } catch (err) {
       console.error('[License] Read error:', err);
-      return { isActivated: false, hwid: currentHwid, error: err.message };
+      cachedLicenseStatus = { isActivated: false, hwid: currentHwid, error: err.message };
+      return cachedLicenseStatus;
     }
   }
 
@@ -242,6 +249,7 @@ module.exports = function registerLicenseIPC(ipcMain, app) {
       };
 
       fs.writeFileSync(licenseFilePath, JSON.stringify(licenseData, null, 2), 'utf8');
+      cachedLicenseStatus = null;
       console.log(`[License] ✓ Successfully activated and locked to HWID: ${currentHwid}`);
 
       return {
@@ -267,6 +275,7 @@ module.exports = function registerLicenseIPC(ipcMain, app) {
   // Deactivate / Reset locally (e.g. for testing)
   ipcMain.handle('license:deactivate', () => {
     try {
+      cachedLicenseStatus = null;
       if (fs.existsSync(licenseFilePath)) {
         fs.unlinkSync(licenseFilePath);
       }

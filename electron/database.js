@@ -740,4 +740,19 @@ const seedDefaults = db.transaction(() => {
 
 seedDefaults()
 
+// ─── PERFORMANCE INDEXES ──────────────────────────────────────────────────
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_products_name ON products(name);
+  CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode);
+  CREATE INDEX IF NOT EXISTS idx_products_generic_name ON products(generic_name);
+  CREATE INDEX IF NOT EXISTS idx_products_is_active ON products(is_active);
+  CREATE INDEX IF NOT EXISTS idx_purchase_items_product_id ON purchase_items(product_id);
+  CREATE INDEX IF NOT EXISTS idx_purchase_items_purchase_id ON purchase_items(purchase_id);
+  CREATE INDEX IF NOT EXISTS idx_purchase_items_stock_fifo ON purchase_items(product_id, qty, qty_sold, expiry_date);
+  CREATE INDEX IF NOT EXISTS idx_purchases_created_at ON purchases(created_at);
+  CREATE INDEX IF NOT EXISTS idx_sales_created_at ON sales(created_at);
+  CREATE INDEX IF NOT EXISTS idx_sale_items_sale_id ON sale_items(sale_id);
+  CREATE INDEX IF NOT EXISTS idx_sale_items_product_id ON sale_items(product_id);
+`)
+
 module.exports = db

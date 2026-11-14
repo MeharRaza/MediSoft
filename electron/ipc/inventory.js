@@ -71,28 +71,9 @@ module.exports = (ipcMain) => {
   })
 
   ipcMain.handle('inventory:searchProduct', (_, q) => {
-    console.log(`🔍 [BACKEND] Searching for product: "${q}"`)
-    
+    if (!q || !q.trim()) return []
+
     // FIFO Logic WITHOUT batch system
-    // Get oldest unsold purchase entry with stock > qty_sold
-    // Expire zone = 180 days (6 months)
-    const expireZoneDate = new Date()
-    expireZoneDate.setDate(expireZoneDate.getDate() + 180)
-    const expireZoneDateStr = expireZoneDate.toISOString().split('T')[0]
-    
-    console.log(`📅 Expiry cutoff date: ${expireZoneDateStr}`)
-    
-    // DEBUG: Check is_active status
-    const activeCheck = db.prepare(`
-      SELECT id, name, is_active 
-      FROM products 
-      WHERE LOWER(name) LIKE LOWER(?)
-    `).all(`%${q}%`)
-    console.log(`📊 [DEBUG] All products matching "${q}":`)
-    activeCheck.forEach(p => {
-      console.log(`  - ${p.name}: is_active=${p.is_active}`)
-    })
-    
     // IMPROVED SEARCH with priority ordering and fuzzy matching
     // Priority: 1. Starts with query, 2. Contains query
     const results = db.prepare(`
@@ -240,40 +221,6 @@ module.exports = (ipcMain) => {
       `%${q}%`,    // Contains (company)
       `%${q}%`     // Contains (no spaces - fuzzy)
     )
-    
-    // Debug: For each product, show purchase_items info
-    results.forEach(r => {
-      const purchaseItems = db.prepare(`
-        SELECT pi.id, pi.qty, pi.qty_sold, (pi.qty - pi.qty_sold) as remaining, 
-               pi.expiry_date, pu.created_at as purchase_date,
-               pi.sale_price as box_sale_price, pi.purchase_price as box_purchase_price
-        FROM purchase_items pi
-        JOIN purchases pu ON pu.id = pi.purchase_id
-        WHERE pi.product_id = ?
-        ORDER BY pu.created_at ASC, pi.expiry_date ASC
-      `).all(r.id)
-      
-      console.log(`  📦 Product: ${r.name} (ID: ${r.id})`)
-      console.log(`     Total stock: ${r.stock}`)
-      console.log(`     pcs_in_pack from products table: ${r.pcs_in_pack}`)
-      console.log(`     current_sale_price (calculated): ${r.current_sale_price}`)
-      console.log(`     current_purchase_price (calculated): ${r.current_purchase_price}`)
-      console.log(`     profit_percent (backend calculated): ${r.profit_percent}%`)
-      console.log(`     current_purchase_item_id: ${r.current_purchase_item_id}`)
-      
-      // Check GST for this purchase
-      if (purchaseItems.length > 0) {
-        const latestPurchase = db.prepare(`
-          SELECT pu.gst_tax_percent 
-          FROM purchases pu 
-          JOIN purchase_items pi ON pi.purchase_id = pu.id
-          WHERE pi.id = ?
-        `).get(r.current_purchase_item_id)
-        console.log(`     GST Tax %: ${latestPurchase?.gst_tax_percent || 0}%`)
-      }
-      
-      console.log(`     Purchase entries:`, purchaseItems)
-    })
     
     return results
   })

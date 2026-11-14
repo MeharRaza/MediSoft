@@ -42,7 +42,6 @@ import BranchManagement from './pages/settings/BranchManagement'
 // ─── HARDWARE LICENSE GUARD ──────────────────────────────
 function LicenseGuard({ children }) {
   const [status, setStatus] = useState(null)
-  const location = useLocation()
 
   const verifyLicense = async () => {
     try {
@@ -61,7 +60,7 @@ function LicenseGuard({ children }) {
 
   useEffect(() => {
     verifyLicense()
-  }, [location.pathname])
+  }, []) // Verify once on mount; subsequent navigations are instant (0ms delay)
 
   if (status === null) {
     return (

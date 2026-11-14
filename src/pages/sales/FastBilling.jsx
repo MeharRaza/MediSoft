@@ -391,19 +391,13 @@ export default function FastBilling() {
     }
     const t = setTimeout(() => {
       api.inventory.searchProduct(searchQ).then(results => {
-        console.log('🔍 FastBilling Search Results:', results)
-        console.log('🔍 Results array length:', results.length)
-        results.forEach(r => {
-          console.log(`  - ${r.name}: current_purchase_item_id=${r.current_purchase_item_id}, stock=${r.stock}`)
-        })
-        setSearchResults(results)
-        console.log('✅ setSearchResults called with', results.length, 'items')
-        setSelectedIndex(results.length > 0 ? 0 : -1) // Auto-select first result
+        setSearchResults(Array.isArray(results) ? results : [])
+        setSelectedIndex(results?.length > 0 ? 0 : -1) // Auto-select first result
       }).catch(err => {
         console.error('❌ Search error:', err)
         setSearchResults([])
       })
-    }, 200)
+    }, 60)
     return () => clearTimeout(t)
   }, [searchQ])
 

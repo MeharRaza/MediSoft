@@ -185,15 +185,21 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false, sett
 
   if (!invoice) return null
 
-  // Group items by product name (merge split batches)
+  // Group items by product name (merge split batches with identical sale price)
   const groupedItems = invoice.items?.reduce((acc, item) => {
-    const existing = acc.find(i => i.product_name === item.product_name && i.sale_price === item.sale_price)
+    const itemName = item.product_name || item.name || ''
+    const itemPrice = Number(item.sale_price) || 0
+    const existing = acc.find(i => {
+      const matchName = (i.product_name || i.name || '') === itemName
+      const matchPrice = Math.abs((Number(i.sale_price) || 0) - itemPrice) < 0.01
+      return matchName && matchPrice
+    })
     if (existing) {
-      existing.qty += item.qty
-      existing.total += item.total
+      existing.qty = (Number(existing.qty) || 0) + (Number(item.qty) || 0)
+      existing.total = (Number(existing.total) || 0) + (Number(item.total) || 0)
       if (item.discount_percent) existing.discount_percent = item.discount_percent
     } else {
-      acc.push({ ...item })
+      acc.push({ ...item, qty: Number(item.qty) || 0, total: Number(item.total) || 0 })
     }
     return acc
   }, []) || []

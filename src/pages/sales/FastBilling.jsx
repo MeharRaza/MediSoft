@@ -610,7 +610,7 @@ export default function FastBilling() {
     }
   }
 
-  const addItem = (product) => {
+  const addItem = async (product) => {
     const availableStock = parseFloat(product.stock) || 0
     
     // STRICT CHECK: Item must have purchase record AND stock > 0
@@ -626,54 +626,92 @@ export default function FastBilling() {
     setSearchQ('')
     setSearchResults([])
     setSelectedIndex(-1)
-    const existing = items.findIndex(i => i.product_id === product.id && i.purchase_item_id === product.current_purchase_item_id)
-    if (existing >= 0) {
-      // Check stock before incrementing
-      if (items[existing].qty + 1 > availableStock) {
-        alert(`❌ Cannot add more "${product.name}"!\n\nOnly ${availableStock} in stock.`)
-        return
-      }
-      const updated = [...items]
-      updated[existing].qty += 1
-      updated[existing].total = calcTotal(updated[existing])
-      setItems(updated)
-      // Focus on existing item's quantity field
-      setTimeout(() => {
-        inputRefs.current[`${existing}-qty`]?.focus()
-        inputRefs.current[`${existing}-qty`]?.select()
-      }, 100)
-    } else {
-      // New product - add to cart
-      // Backend returns per-box prices, convert to per-pill for cart
-      const salePerPill = (product.current_sale_price || product.sale_price || 0) / (product.pcs_in_pack || 1)
-      const purchasePerPill = (product.current_purchase_price || product.trade_price || 0) / (product.pcs_in_pack || 1)
-      
-      const item = {
-        product_id: product.id,
-        name: product.name,
-        category: product.category_name,
-        rack_location: product.rack_location || 'N/A',
-        manufacturer_name: product.company_name || 'N/A',
-        purchase_item_id: product.current_purchase_item_id,
-        expiry_date: product.current_expiry || '',
-        qty: 1,
-        sale_price: salePerPill, // Per pill for calculation
-        purchase_price: purchasePerPill, // For profit calculation
-        profit_percent: product.profit_percent || 0,
-        discount_percent: 0,
-        total: salePerPill,
-        current_stock: product.current_stock || 0,
-        total_stock: availableStock,
-        pcs_in_pack: product.pcs_in_pack || 1,
-      }
-      console.log('✅ Item added to cart:', item)
-      const newIndex = items.length
-      setItems(prev => [...prev, item])
-      // Focus on new item's quantity field
-      setTimeout(() => {
-        inputRefs.current[`${newIndex}-qty`]?.focus()
-        inputRefs.current[`${newIndex}-qty`]?.select()
-      }, 100)
+
+    // Calculate current total quantity of this product already in cart
+    const currentQtyInCart = items
+      .filter(i => i.product_id === product.id)
+      .reduce((sum, i) => sum + (parseFloat(i.qty) || 0), 0)
+
+    const targetQty = currentQtyInCart + 1
+    if (targetQty > availableStock) {
+      alert(`❌ Cannot add more "${product.name}"!\n\nOnly ${availableStock} in stock.`)
+      return
+    }
+
+    try {
+      const groups = await api.inventory.getFifoSplits(product.id, targetQty)
+      if (!groups || groups.length === 0) return
+
+      // Preserve discount percent from existing item if any
+      const existingItem = items.find(i => i.product_id === product.id)
+      const existingDisc = existingItem?.discount_percent || 0
+
+      const mappedGroups = groups.map(g => {
+        const disc = existingDisc
+        const base = g.qty * g.sale_price
+        const total = base * (1 - disc / 100)
+        return {
+          ...g,
+          discount_percent: disc,
+          total: Math.round(total * 100) / 100
+        }
+      })
+
+      setItems(prev => {
+        const otherItems = prev.filter(i => i.product_id !== product.id)
+        const updated = [...otherItems, ...mappedGroups]
+        const targetFocusIndex = updated.length - 1
+        setTimeout(() => {
+          inputRefs.current[`${targetFocusIndex}-qty`]?.focus()
+          inputRefs.current[`${targetFocusIndex}-qty`]?.select()
+        }, 100)
+        return updated
+      })
+    } catch (err) {
+      console.error('Failed to add item with FIFO splits:', err)
+    }
+  }
+
+  const handleQtyCommit = async (idx) => {
+    const targetItem = items[idx]
+    if (!targetItem || targetItem.price_overridden) return
+
+    // Calculate total quantity requested for this product across cart
+    const productItems = items.filter(i => i.product_id === targetItem.product_id)
+    const totalRequestedQty = productItems.reduce((sum, i) => sum + (parseFloat(i.qty) || 0), 0)
+    if (totalRequestedQty <= 0) return
+
+    const maxStock = parseFloat(targetItem.total_stock) || 0
+    if (maxStock > 0 && totalRequestedQty > maxStock) {
+      alert(`❌ Cannot enter ${totalRequestedQty} qty for "${targetItem.name}".\n\nOnly ${maxStock} available in stock!`)
+      return
+    }
+
+    try {
+      const groups = await api.inventory.getFifoSplits(targetItem.product_id, totalRequestedQty)
+      if (!groups || groups.length === 0) return
+
+      const existingDisc = targetItem.discount_percent || 0
+      const mappedGroups = groups.map(g => {
+        const disc = existingDisc
+        const base = g.qty * g.sale_price
+        const total = base * (1 - disc / 100)
+        return {
+          ...g,
+          discount_percent: disc,
+          total: Math.round(total * 100) / 100
+        }
+      })
+
+      setItems(prev => {
+        const firstIndex = prev.findIndex(i => i.product_id === targetItem.product_id)
+        if (firstIndex === -1) return prev
+        const before = prev.slice(0, firstIndex).filter(i => i.product_id !== targetItem.product_id)
+        const after = prev.slice(firstIndex).filter(i => i.product_id !== targetItem.product_id)
+        return [...before, ...mappedGroups, ...after]
+      })
+    } catch (err) {
+      console.error('Failed to update item with FIFO splits:', err)
     }
   }
 
@@ -692,6 +730,10 @@ export default function FastBilling() {
         alert(`❌ Cannot enter ${enteredQty} qty for "${updated[idx].name}".\n\nOnly ${maxStock} available in stock!`)
         value = maxStock
       }
+      // Quantity modified: clear stale splits so old batch qty is never used
+      delete updated[idx].splits
+    } else if (field === 'sale_price') {
+      updated[idx].price_overridden = true
     }
     updated[idx][field] = value
     updated[idx].total = calcTotal(updated[idx])
@@ -742,10 +784,10 @@ export default function FastBilling() {
     if (items.length === 0) return
     
     // Check for zero-stock or unpurchased items
-    const invalidItems = items.filter(item => !item.purchase_item_id || parseFloat(item.qty) <= 0 || (item.total_stock && parseFloat(item.qty) > parseFloat(item.total_stock)))
+    const invalidItems = items.filter(item => !item.purchase_item_id || parseFloat(item.qty) <= 0)
     if (invalidItems.length > 0) {
-      const names = invalidItems.map(i => `${i.name} (Qty: ${i.qty}, Stock: ${i.total_stock || 0})`).join('\n')
-      alert(`❌ Cannot save bill!\n\nThe following items have 0 stock or invalid quantity:\n\n${names}\n\nPlease remove these items or complete purchase entry before saving.`)
+      const names = invalidItems.map(i => `${i.name} (Qty: ${i.qty})`).join('\n')
+      alert(`❌ Cannot save bill!\n\nThe following items have invalid quantity or no purchase entry:\n\n${names}\n\nPlease remove these items or complete purchase entry before saving.`)
       return
     }
     
@@ -753,7 +795,8 @@ export default function FastBilling() {
       product_id: i.product_id,
       name: i.name,
       purchase_item_id: i.purchase_item_id,
-      qty: i.qty
+      qty: i.qty,
+      sale_price: i.sale_price
     })))
     
     setSaving(true)
@@ -768,15 +811,25 @@ export default function FastBilling() {
         grand_total: grandTotal,
         paid_amount: parseFloat(paidAmount) || (paymentMethod === 'cash' ? grandTotal : 0),
         change_amount: Math.max(change, 0),
-        items: items.map(i => ({
-          product_id: i.product_id,
-          purchase_item_id: i.purchase_item_id,
-          expiry_date: i.expiry_date,
-          qty: parseFloat(i.qty),
-          sale_price: i.sale_price,
-          discount_percent: i.discount_percent,
-          total: i.total,
-        })),
+        items: items.map(i => {
+          const itemQty = parseFloat(i.qty) || 0
+          const splitsTotal = (i.splits && Array.isArray(i.splits))
+            ? i.splits.reduce((sum, sp) => sum + (parseFloat(sp.qty) || 0), 0)
+            : 0
+          const isSplitsValid = Boolean(i.splits && Math.abs(splitsTotal - itemQty) < 0.001)
+
+          return {
+            product_id: i.product_id,
+            purchase_item_id: i.purchase_item_id,
+            expiry_date: i.expiry_date,
+            qty: itemQty,
+            sale_price: i.sale_price,
+            discount_percent: i.discount_percent,
+            total: i.total,
+            splits: isSplitsValid ? i.splits : null,
+            price_overridden: Boolean(i.price_overridden)
+          }
+        }),
       })
       setSuccess(result.invoice_no || 'INV')
       
@@ -813,10 +866,10 @@ export default function FastBilling() {
     if (items.length === 0) return
     
     // Check for zero-stock or unpurchased items
-    const invalidItems = items.filter(item => !item.purchase_item_id || parseFloat(item.qty) <= 0 || (item.total_stock && parseFloat(item.qty) > parseFloat(item.total_stock)))
+    const invalidItems = items.filter(item => !item.purchase_item_id || parseFloat(item.qty) <= 0)
     if (invalidItems.length > 0) {
-      const names = invalidItems.map(i => `${i.name} (Qty: ${i.qty}, Stock: ${i.total_stock || 0})`).join('\n')
-      alert(`❌ Cannot save bill!\n\nThe following items have 0 stock or invalid quantity:\n\n${names}\n\nPlease remove these items or complete purchase entry before saving.`)
+      const names = invalidItems.map(i => `${i.name} (Qty: ${i.qty})`).join('\n')
+      alert(`❌ Cannot save bill!\n\nThe following items have invalid quantity or no purchase entry:\n\n${names}\n\nPlease remove these items or complete purchase entry before saving.`)
       return
     }
     
@@ -824,7 +877,8 @@ export default function FastBilling() {
       product_id: i.product_id,
       name: i.name,
       purchase_item_id: i.purchase_item_id,
-      qty: i.qty
+      qty: i.qty,
+      sale_price: i.sale_price
     })))
     
     console.log('👤 Customer info:', {
@@ -845,15 +899,25 @@ export default function FastBilling() {
         grand_total: grandTotal,
         paid_amount: parseFloat(paidAmount) || (paymentMethod === 'cash' ? grandTotal : 0),
         change_amount: Math.max(change, 0),
-        items: items.map(i => ({
-          product_id: i.product_id,
-          purchase_item_id: i.purchase_item_id,
-          expiry_date: i.expiry_date,
-          qty: parseFloat(i.qty),
-          sale_price: i.sale_price,
-          discount_percent: i.discount_percent,
-          total: i.total,
-        })),
+        items: items.map(i => {
+          const itemQty = parseFloat(i.qty) || 0
+          const splitsTotal = (i.splits && Array.isArray(i.splits))
+            ? i.splits.reduce((sum, sp) => sum + (parseFloat(sp.qty) || 0), 0)
+            : 0
+          const isSplitsValid = Boolean(i.splits && Math.abs(splitsTotal - itemQty) < 0.001)
+
+          return {
+            product_id: i.product_id,
+            purchase_item_id: i.purchase_item_id,
+            expiry_date: i.expiry_date,
+            qty: itemQty,
+            sale_price: i.sale_price,
+            discount_percent: i.discount_percent,
+            total: i.total,
+            splits: isSplitsValid ? i.splits : null,
+            price_overridden: Boolean(i.price_overridden)
+          }
+        }),
       })
       setSuccess(result.invoice_no || 'INV')
       
@@ -861,7 +925,7 @@ export default function FastBilling() {
       try {
         const [invoiceDetails, freshSettings] = await Promise.all([
           api.sales.getInvoiceById(result.id),
-          invoiceSettings ? Promise.resolve(invoiceSettings) : api.settings.getInvoiceSettings()
+          api.settings.getInvoiceSettings() // Always fresh from DB!
         ])
         if (freshSettings) setInvoiceSettings(freshSettings)
         setAutoPrint(true) // Enable auto-print for Ctrl+P
@@ -1359,13 +1423,16 @@ export default function FastBilling() {
                 </td></tr>
               ) : items.map((item, idx) => {
                 // Calculate remaining stock after this sale for CURRENT PURCHASE ENTRY
-                const currentRemaining = item.current_stock - item.qty
+                const currentRemaining = Math.max(0, (parseFloat(item.current_stock) || 0) - (parseFloat(item.qty) || 0))
                 const pcsInPack = item.pcs_in_pack || 1
                 const currentBoxes = pcsInPack > 1 ? Math.floor(currentRemaining / pcsInPack) : 0
                 const currentLoose = pcsInPack > 1 ? currentRemaining % pcsInPack : currentRemaining
                 
-                // Calculate total remaining across ALL purchase entries
-                const totalRemaining = item.total_stock - item.qty
+                // Calculate total remaining across ALL purchase entries for this product
+                const productCartTotal = items
+                  .filter(i => i.product_id === item.product_id)
+                  .reduce((sum, i) => sum + (parseFloat(i.qty) || 0), 0)
+                const totalRemaining = (parseFloat(item.total_stock) || 0) - productCartTotal
                 const totalBoxes = pcsInPack > 1 ? Math.floor(totalRemaining / pcsInPack) : 0
                 const totalLoose = pcsInPack > 1 ? totalRemaining % pcsInPack : totalRemaining
                 
@@ -1394,7 +1461,11 @@ export default function FastBilling() {
                         min="0.01" 
                         step="1"
                         onChange={e => updateItem(idx, 'qty', parseFloat(e.target.value) || 1)}
-                        onKeyDown={e => handleCartKeyDown(e, idx, 'qty')}
+                        onBlur={() => handleQtyCommit(idx)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') handleQtyCommit(idx)
+                          handleCartKeyDown(e, idx, 'qty')
+                        }}
                         onFocus={e => e.target.select()}
                         className="w-16 px-2 py-1 text-right border border-[#c3c6d5] rounded text-[12px] focus:border-[#003c90] focus:ring-2 focus:ring-[#003c90]/20 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       />
@@ -1457,20 +1528,24 @@ export default function FastBilling() {
                       <div className="space-y-0.5">
                         {/* Current Purchase Entry Stock */}
                         <p className={`text-[10px] font-semibold ${
-                          currentRemaining < 0 
+                          totalRemaining < 0 
                             ? 'text-red-600' 
-                            : currentRemaining < 10 
+                            : currentRemaining < 5 
                               ? 'text-amber-600' 
                               : 'text-green-600'
                         }`}>
-                          {currentRemaining < 0 ? (
+                          {item.splits && item.splits.length > 1 ? (
                             <>
-                              <span className="material-symbols-outlined text-[12px] inline-block align-middle mr-1">warning</span>
-                              Insufficient stock in current purchase! Need {Math.abs(currentRemaining)} more pills
+                              <span className="material-symbols-outlined text-[12px] inline-block align-middle mr-1 text-blue-600">call_split</span>
+                              Multi-batch line: <span className="font-bold text-[#003c90]">{item.qty} pills</span> (from {item.splits.length} batches @ {fmt(item.sale_price)})
+                            </>
+                          ) : currentRemaining === 0 ? (
+                            <>
+                              Current Batch: <span className="font-bold text-amber-700">0 remaining (Fully allocated)</span>
                             </>
                           ) : (
                             <>
-                              Current Purchase Remaining: <span className="font-bold">{currentRemaining} pills</span>
+                              Current Batch Remaining: <span className="font-bold">{currentRemaining} pills</span>
                               {pcsInPack > 1 && currentBoxes >= 0 && (
                                 <span className="ml-1">
                                   ({currentBoxes} box{currentBoxes !== 1 ? 'es' : ''} + {currentLoose} loose)

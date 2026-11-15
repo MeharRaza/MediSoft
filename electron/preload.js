@@ -67,6 +67,7 @@ contextBridge.exposeInMainWorld('api', {
     updateProduct:   (data) => ipcRenderer.invoke('inventory:updateProduct', data),
     deleteProduct:   (id) => ipcRenderer.invoke('inventory:deleteProduct', id),
     getBatches:      (productId) => ipcRenderer.invoke('inventory:getBatches', productId),
+    getFifoSplits:   (productId, qty) => ipcRenderer.invoke('inventory:getFifoSplits', productId, qty),
     getAllBatches:   (filters) => ipcRenderer.invoke('inventory:getAllBatches', filters),
     updatePurchaseItemExpiry: (data) => ipcRenderer.invoke('inventory:updatePurchaseItemExpiry', data),
     adjustStock:     (data) => ipcRenderer.invoke('inventory:adjustStock', data),

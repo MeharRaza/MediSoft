@@ -33,82 +33,163 @@ module.exports = (ipcMain) => {
       console.log(`✅ Sale created with ID: ${saleId}, Invoice: ${invNo}`)
 
       for (const item of data.items) {
+        const itemRequestedQty = parseFloat(item.qty) || 0
+        if (itemRequestedQty <= 0) continue
+
+        // Check if item.splits is valid AND its total qty matches itemRequestedQty
+        const splitsTotalQty = (item.splits && Array.isArray(item.splits) && item.splits.length > 0)
+          ? item.splits.reduce((s, sp) => s + (parseFloat(sp.qty) || 0), 0)
+          : 0
+
+        const hasValidSplits = Boolean(
+          item.splits && 
+          item.splits.length > 0 && 
+          Math.abs(splitsTotalQty - itemRequestedQty) < 0.001
+        )
+
         console.log(`📦 Processing sale item:`, {
           product_id: item.product_id,
-          purchase_item_id: item.purchase_item_id,
-          qty: item.qty,
-          expiry_date: item.expiry_date
+          qty: itemRequestedQty,
+          sale_price: item.sale_price,
+          hasValidSplits,
+          splitsTotalQty
         })
 
-        // ── FIFO SPLIT: Distribute qty across batches ──────────────────────
-        // Get all available batches for this product (oldest expiry first)
-        const batchesAvailable = db.prepare(`
-          SELECT pi.id, pi.qty, pi.qty_sold, pi.expiry_date,
-                 (pi.qty - pi.qty_sold) as remaining
-          FROM purchase_items pi
-          JOIN purchases pu ON pu.id = pi.purchase_id
-          WHERE pi.product_id = ?
-            AND (pi.qty - pi.qty_sold) > 0
-            AND (pi.expiry_date IS NULL OR pi.expiry_date >= date('now'))
-          ORDER BY pi.expiry_date ASC NULLS LAST, pu.created_at ASC
-        `).all(item.product_id)
+        if (hasValidSplits) {
+          // Use verified pre-calculated splits
+          for (const split of item.splits) {
+            const splitQty = parseFloat(split.qty) || 0
+            if (splitQty <= 0) continue
 
-        let qtyNeeded = parseFloat(item.qty)
-        const batchSplits = [] // [{purchase_item_id, qty}]
+            const splitPrice = parseFloat(item.sale_price) || 0
+            const splitDisc = parseFloat(item.discount_percent) || 0
+            const splitTotal = Math.round(splitQty * splitPrice * (1 - splitDisc / 100) * 100) / 100
 
-        for (const batch of batchesAvailable) {
-          if (qtyNeeded <= 0) break
-          const take = Math.min(qtyNeeded, batch.remaining)
-          batchSplits.push({ purchase_item_id: batch.id, qty: take, expiry_date: batch.expiry_date })
-          qtyNeeded -= take
-        }
+            db.prepare(`
+              INSERT INTO sale_items (sale_id,product_id,purchase_item_id,expiry_date,qty,sale_price,discount_percent,total)
+              VALUES (?,?,?,?,?,?,?,?)
+            `).run(
+              saleId, item.product_id, split.purchase_item_id || null,
+              split.expiry_date || item.expiry_date || null,
+              splitQty,
+              splitPrice,
+              splitDisc,
+              splitTotal
+            )
 
-        // If still need more (total stock insufficient), take from the frontend-selected batch
-        if (qtyNeeded > 0 && item.purchase_item_id) {
-          const existing = batchSplits.find(b => b.purchase_item_id === item.purchase_item_id)
-          if (existing) {
-            existing.qty += qtyNeeded
-          } else {
-            const batch = db.prepare('SELECT expiry_date FROM purchase_items WHERE id=?').get(item.purchase_item_id)
-            batchSplits.push({ purchase_item_id: item.purchase_item_id, qty: qtyNeeded, expiry_date: batch?.expiry_date || null })
+            // Update qty_sold for this batch if valid batch exists
+            if (split.purchase_item_id) {
+              db.prepare('UPDATE purchase_items SET qty_sold = qty_sold + ? WHERE id=?')
+                .run(splitQty, split.purchase_item_id)
+              console.log(`   ✅ Pre-split: Batch ${split.purchase_item_id} → qty ${splitQty}, qty_sold updated`)
+            }
           }
-          qtyNeeded = 0
-        }
+        } else {
+          // Dynamic FIFO distribution across available batches for the FULL itemRequestedQty!
+          const batchesAvailable = db.prepare(`
+            SELECT pi.id, pi.qty, pi.qty_sold, pi.expiry_date,
+                   pi.sale_price, pi.pcs_in_pack,
+                   (pi.qty - pi.qty_sold) as remaining
+            FROM purchase_items pi
+            JOIN purchases pu ON pu.id = pi.purchase_id
+            WHERE pi.product_id = ?
+              AND (pi.qty - pi.qty_sold) > 0
+            ORDER BY CASE WHEN pi.expiry_date IS NOT NULL AND pi.expiry_date < date('now') THEN 1 ELSE 0 END ASC,
+                     pi.expiry_date ASC NULLS LAST, pu.created_at ASC
+          `).all(item.product_id)
 
-        // If no batches found at all, ensure item is still recorded (fall back to batch or product default)
-        if (batchSplits.length === 0) {
-          let exp = item.expiry_date || null
-          if (item.purchase_item_id) {
-            const batch = db.prepare('SELECT expiry_date FROM purchase_items WHERE id=?').get(item.purchase_item_id)
-            if (batch?.expiry_date) exp = batch.expiry_date
+          let qtyNeeded = itemRequestedQty
+          const batchSplits = []
+
+          for (const batch of batchesAvailable) {
+            if (qtyNeeded <= 0) break
+            const take = Math.min(qtyNeeded, batch.remaining)
+            if (take <= 0) continue
+            const pcsInPack = batch.pcs_in_pack || 1
+            const batchUnitSalePrice = Math.round((batch.sale_price / pcsInPack) * 100) / 100
+            
+            batchSplits.push({
+              purchase_item_id: batch.id,
+              qty: take,
+              expiry_date: batch.expiry_date,
+              sale_price: item.price_overridden ? item.sale_price : batchUnitSalePrice
+            })
+            qtyNeeded -= take
           }
-          batchSplits.push({ purchase_item_id: item.purchase_item_id || null, qty: parseFloat(item.qty), expiry_date: exp })
-        }
 
-        console.log(`   FIFO splits for ${item.qty} qty:`, batchSplits)
+          // If still need more, take from the frontend-selected batch or last available
+          if (qtyNeeded > 0 && item.purchase_item_id) {
+            const existing = batchSplits.find(b => b.purchase_item_id === item.purchase_item_id)
+            if (existing) {
+              existing.qty += qtyNeeded
+            } else {
+              const batch = db.prepare('SELECT expiry_date, sale_price, pcs_in_pack FROM purchase_items WHERE id=?').get(item.purchase_item_id)
+              const pcsInPack = batch?.pcs_in_pack || 1
+              const batchUnitSalePrice = batch ? Math.round((batch.sale_price / pcsInPack) * 100) / 100 : item.sale_price
+              batchSplits.push({
+                purchase_item_id: item.purchase_item_id,
+                qty: qtyNeeded,
+                expiry_date: batch?.expiry_date || null,
+                sale_price: item.price_overridden ? item.sale_price : batchUnitSalePrice
+              })
+            }
+            qtyNeeded = 0
+          }
 
-        // Insert one sale_item row per batch split + update qty_sold
-        for (const split of batchSplits) {
-          db.prepare(`INSERT INTO sale_items (sale_id,product_id,purchase_item_id,expiry_date,qty,sale_price,discount_percent,total)
-            VALUES (?,?,?,?,?,?,?,?)`
-          ).run(
-            saleId, item.product_id, split.purchase_item_id,
-            split.expiry_date || null,
-            split.qty,
-            item.sale_price,
-            item.discount_percent || 0,
-            // Pro-rate total to this split's qty
-            (item.total / parseFloat(item.qty)) * split.qty
-          )
+          // If no batches found at all, fall back to item default
+          if (batchSplits.length === 0) {
+            let exp = item.expiry_date || null
+            if (item.purchase_item_id) {
+              const batch = db.prepare('SELECT expiry_date FROM purchase_items WHERE id=?').get(item.purchase_item_id)
+              if (batch?.expiry_date) exp = batch.expiry_date
+            }
+            batchSplits.push({
+              purchase_item_id: item.purchase_item_id || null,
+              qty: itemRequestedQty,
+              expiry_date: exp,
+              sale_price: item.sale_price
+            })
+          }
 
-          // Update qty_sold for this batch if valid batch exists
-          if (split.purchase_item_id) {
-            db.prepare('UPDATE purchase_items SET qty_sold = qty_sold + ? WHERE id=?')
-              .run(split.qty, split.purchase_item_id)
-            console.log(`   ✅ Split: Batch ${split.purchase_item_id} → qty ${split.qty}, qty_sold updated`)
+          console.log(`   FIFO dynamic splits for ${itemRequestedQty} qty:`, batchSplits)
+
+          for (const split of batchSplits) {
+            const splitPrice = split.sale_price !== undefined ? split.sale_price : item.sale_price
+            const splitDisc = parseFloat(item.discount_percent) || 0
+            const splitTotal = Math.round(split.qty * splitPrice * (1 - splitDisc / 100) * 100) / 100
+
+            db.prepare(`
+              INSERT INTO sale_items (sale_id,product_id,purchase_item_id,expiry_date,qty,sale_price,discount_percent,total)
+              VALUES (?,?,?,?,?,?,?,?)`
+            ).run(
+              saleId, item.product_id, split.purchase_item_id,
+              split.expiry_date || null,
+              split.qty,
+              splitPrice,
+              splitDisc,
+              splitTotal
+            )
+
+            // Update qty_sold for this batch if valid batch exists
+            if (split.purchase_item_id) {
+              db.prepare('UPDATE purchase_items SET qty_sold = qty_sold + ? WHERE id=?')
+                .run(split.qty, split.purchase_item_id)
+              console.log(`   ✅ Dynamic split: Batch ${split.purchase_item_id} → qty ${split.qty}, qty_sold updated`)
+            }
           }
         }
       }
+
+      // Synchronize sales sub_total and grand_total with actual sale_items totals
+      const itemsGross = db.prepare(`SELECT COALESCE(SUM(qty * sale_price), 0) as s FROM sale_items WHERE sale_id=?`).get(saleId).s
+      const itemsNet = db.prepare(`SELECT COALESCE(SUM(total), 0) as s FROM sale_items WHERE sale_id=?`).get(saleId).s
+      const invoiceDiscount = parseFloat(data.discount) || 0
+      const calculatedGrandTotal = Math.max(0, itemsNet - (invoiceDiscount > (itemsGross - itemsNet) ? (invoiceDiscount - (itemsGross - itemsNet)) : 0))
+      
+      const finalSubTotal = data.sub_total > 0 ? data.sub_total : itemsGross
+      const finalGrandTotal = data.grand_total > 0 ? data.grand_total : calculatedGrandTotal
+      
+      db.prepare(`UPDATE sales SET sub_total=?, grand_total=? WHERE id=?`).run(finalSubTotal, finalGrandTotal, saleId)
 
       // Update customer balance if credit
       if (data.customer_id && data.payment_method === 'credit') {

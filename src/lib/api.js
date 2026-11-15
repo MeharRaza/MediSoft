@@ -72,6 +72,7 @@ export const api = {
     updateProduct:   (data) => isElectron ? window.api.inventory.updateProduct(data) : Promise.resolve({ success: true }),
     deleteProduct:   (id) => isElectron ? window.api.inventory.deleteProduct(id) : Promise.resolve({ success: true }),
     getBatches:      (id) => isElectron ? window.api.inventory.getBatches(id) : Promise.resolve([]),
+    getFifoSplits:   (productId, qty) => isElectron ? window.api.inventory.getFifoSplits(productId, qty) : Promise.resolve([]),
     getAllBatches:   (f) => isElectron ? window.api.inventory.getAllBatches(f) : Promise.resolve([]),
     updatePurchaseItemExpiry: (data) => isElectron ? window.api.inventory.updatePurchaseItemExpiry(data) : Promise.resolve({ success: true }),
     adjustStock:     (data) => isElectron ? window.api.inventory.adjustStock(data) : Promise.resolve({ success: true }),

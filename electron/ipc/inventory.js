@@ -307,6 +307,141 @@ module.exports = (ipcMain) => {
     `).all(productId)
   })
 
+  ipcMain.handle('inventory:getFifoSplits', (_, productId, qty) => {
+    const requestedQty = parseFloat(qty) || 1
+    const pId = parseInt(productId)
+    if (!pId) return []
+
+    // Get product info
+    const product = db.prepare(`
+      SELECT p.*, c.name as category_name
+      FROM products p
+      LEFT JOIN categories c ON c.id = p.category_id
+      WHERE p.id = ?
+    `).get(pId)
+    if (!product) return []
+
+    // Get all available batches for this product in FIFO order (oldest expiry first, then oldest purchase)
+    const batches = db.prepare(`
+      SELECT pi.id, pi.product_id, pi.purchase_id, pi.expiry_date,
+             pi.purchase_price, pi.sale_price, pi.pcs_in_pack, pi.profit_percent,
+             pi.total, pi.qty_in_boxes, pi.bonus,
+             (pi.qty - pi.qty_sold) as remaining
+      FROM purchase_items pi
+      JOIN purchases pu ON pu.id = pi.purchase_id
+      WHERE pi.product_id = ?
+        AND (pi.qty - pi.qty_sold) > 0
+      ORDER BY CASE WHEN pi.expiry_date IS NOT NULL AND pi.expiry_date < date('now') THEN 1 ELSE 0 END ASC,
+               pi.expiry_date ASC NULLS LAST, pu.created_at ASC
+    `).all(pId)
+
+    const totalStock = batches.reduce((s, b) => s + b.remaining, 0)
+    let qtyNeeded = requestedQty
+    const rawAllocations = []
+
+    for (const batch of batches) {
+      if (qtyNeeded <= 0) break
+      const take = Math.min(qtyNeeded, batch.remaining)
+      if (take <= 0) continue
+
+      const pcsInPack = batch.pcs_in_pack || product.pcs_in_pack || 1
+      const unitSalePrice = Math.round((batch.sale_price / pcsInPack) * 100) / 100
+
+      let unitPurchasePrice = 0
+      if (batch.profit_percent !== null && batch.profit_percent !== undefined && batch.profit_percent !== 0) {
+        unitPurchasePrice = unitSalePrice * (1 - batch.profit_percent / 100)
+      } else if (batch.total > 0 && batch.qty > 0) {
+        unitPurchasePrice = (batch.total / batch.qty)
+      } else {
+        unitPurchasePrice = batch.purchase_price / pcsInPack
+      }
+
+      rawAllocations.push({
+        batch_id: batch.id,
+        qty: take,
+        unit_sale_price: unitSalePrice,
+        unit_purchase_price: unitPurchasePrice,
+        profit_percent: batch.profit_percent,
+        expiry_date: batch.expiry_date || '',
+        remaining: batch.remaining,
+        pcs_in_pack: pcsInPack
+      })
+      qtyNeeded -= take
+    }
+
+    // If still need more qty (overselling or no batches)
+    if (qtyNeeded > 0) {
+      if (rawAllocations.length > 0) {
+        const lastAlloc = rawAllocations[rawAllocations.length - 1]
+        lastAlloc.qty += qtyNeeded
+      } else {
+        const pcsInPack = product.pcs_in_pack || 1
+        const unitSalePrice = Math.round(((product.sale_price || 0) / pcsInPack) * 100) / 100
+        const unitPurchasePrice = (product.trade_price || 0) / pcsInPack
+        rawAllocations.push({
+          batch_id: null,
+          qty: requestedQty,
+          unit_sale_price: unitSalePrice,
+          unit_purchase_price: unitPurchasePrice,
+          profit_percent: 0,
+          expiry_date: '',
+          remaining: 0,
+          pcs_in_pack: pcsInPack
+        })
+      }
+    }
+
+    // Group consecutive allocations with the SAME unit_sale_price!
+    const groups = []
+    for (const alloc of rawAllocations) {
+      const lastGroup = groups[groups.length - 1]
+      if (lastGroup && Math.abs(lastGroup.sale_price - alloc.unit_sale_price) < 0.005) {
+        // Same price -> merge into single group!
+        const prevCost = lastGroup.purchase_price * lastGroup.qty
+        const currCost = alloc.unit_purchase_price * alloc.qty
+        lastGroup.qty += alloc.qty
+        lastGroup.purchase_price = (prevCost + currCost) / lastGroup.qty
+        lastGroup.total = Math.round(lastGroup.qty * lastGroup.sale_price * 100) / 100
+        lastGroup.splits.push({
+          purchase_item_id: alloc.batch_id,
+          qty: alloc.qty,
+          expiry_date: alloc.expiry_date
+        })
+      } else {
+        // Different price -> create separate group!
+        const profitPct = alloc.profit_percent !== null && alloc.profit_percent !== undefined && alloc.profit_percent !== 0
+          ? alloc.profit_percent
+          : (alloc.unit_sale_price > 0 ? ((alloc.unit_sale_price - alloc.unit_purchase_price) / alloc.unit_sale_price) * 100 : 0)
+
+        groups.push({
+          product_id: product.id,
+          name: product.name,
+          category: product.category_name || '',
+          rack_location: product.rack_location || 'N/A',
+          manufacturer_name: product.company_name || '—',
+          purchase_item_id: alloc.batch_id,
+          expiry_date: alloc.expiry_date,
+          qty: alloc.qty,
+          sale_price: alloc.unit_sale_price,
+          purchase_price: alloc.unit_purchase_price,
+          profit_percent: profitPct,
+          discount_percent: 0,
+          total: Math.round(alloc.qty * alloc.unit_sale_price * 100) / 100,
+          current_stock: alloc.remaining,
+          total_stock: totalStock,
+          pcs_in_pack: alloc.pcs_in_pack,
+          splits: [{
+            purchase_item_id: alloc.batch_id,
+            qty: alloc.qty,
+            expiry_date: alloc.expiry_date
+          }]
+        })
+      }
+    }
+
+    return groups
+  })
+
   ipcMain.handle('inventory:adjustStock', (_, data) => {
     const adj = db.transaction(() => {
       const batch = db.prepare('SELECT * FROM batches WHERE id=?').get(data.batch_id)

@@ -89,20 +89,32 @@ module.exports = (ipcMain) => {
           WHERE pi.product_id = p.id
         ), 0) as stock,
         
-        -- Active purchase entry (FIFO by EXPIRY DATE - oldest expiry first)
-        (SELECT pi.id FROM purchase_items pi 
-         JOIN purchases pu ON pu.id = pi.purchase_id
-         WHERE pi.product_id = p.id 
-         AND pi.qty > pi.qty_sold
-         AND (pi.expiry_date IS NULL OR pi.expiry_date >= date('now'))
-         ORDER BY pi.expiry_date ASC NULLS LAST, pu.created_at ASC LIMIT 1) as current_purchase_item_id,
+        -- Active purchase entry (FIFO by EXPIRY DATE - oldest expiry first, fallback to latest purchase)
+        COALESCE(
+          (SELECT pi.id FROM purchase_items pi 
+           JOIN purchases pu ON pu.id = pi.purchase_id
+           WHERE pi.product_id = p.id 
+           AND pi.qty > pi.qty_sold
+           AND (pi.expiry_date IS NULL OR pi.expiry_date >= date('now'))
+           ORDER BY pi.expiry_date ASC NULLS LAST, pu.created_at ASC LIMIT 1),
+          (SELECT pi.id FROM purchase_items pi 
+           JOIN purchases pu ON pu.id = pi.purchase_id
+           WHERE pi.product_id = p.id 
+           ORDER BY pu.created_at DESC LIMIT 1)
+        ) as current_purchase_item_id,
         
-        (SELECT pi.expiry_date FROM purchase_items pi 
-         JOIN purchases pu ON pu.id = pi.purchase_id
-         WHERE pi.product_id = p.id 
-         AND pi.qty > pi.qty_sold
-         AND (pi.expiry_date IS NULL OR pi.expiry_date >= date('now'))
-         ORDER BY pi.expiry_date ASC NULLS LAST, pu.created_at ASC LIMIT 1) as current_expiry,
+        COALESCE(
+          (SELECT pi.expiry_date FROM purchase_items pi 
+           JOIN purchases pu ON pu.id = pi.purchase_id
+           WHERE pi.product_id = p.id 
+           AND pi.qty > pi.qty_sold
+           AND (pi.expiry_date IS NULL OR pi.expiry_date >= date('now'))
+           ORDER BY pi.expiry_date ASC NULLS LAST, pu.created_at ASC LIMIT 1),
+          (SELECT pi.expiry_date FROM purchase_items pi 
+           JOIN purchases pu ON pu.id = pi.purchase_id
+           WHERE pi.product_id = p.id 
+           ORDER BY pu.created_at DESC LIMIT 1)
+        ) as current_expiry,
         
         -- FIFO Batch Sale Price (oldest expiring batch with available stock; fallback to latest purchase, then product table)
         COALESCE(
@@ -308,13 +320,13 @@ module.exports = (ipcMain) => {
   })
 
   ipcMain.handle('inventory:getFifoSplits', (_, productId, qty) => {
-    const requestedQty = parseFloat(qty) || 1
+    const requestedQty = (qty !== undefined && qty !== null && !isNaN(parseFloat(qty))) ? parseFloat(qty) : 1
     const pId = parseInt(productId)
     if (!pId) return []
 
     // Get product info
     const product = db.prepare(`
-      SELECT p.*, c.name as category_name
+      SELECT p.*, p.generic_name as company_name, c.name as category_name
       FROM products p
       LEFT JOIN categories c ON c.id = p.category_id
       WHERE p.id = ?
@@ -369,22 +381,35 @@ module.exports = (ipcMain) => {
       qtyNeeded -= take
     }
 
-    // If still need more qty (overselling or no batches)
-    if (qtyNeeded > 0) {
-      if (rawAllocations.length > 0) {
+    // If still need more qty (overselling, zero qty requested, or no active batches)
+    if (qtyNeeded > 0 || rawAllocations.length === 0) {
+      if (rawAllocations.length > 0 && qtyNeeded > 0) {
         const lastAlloc = rawAllocations[rawAllocations.length - 1]
         lastAlloc.qty += qtyNeeded
       } else {
-        const pcsInPack = product.pcs_in_pack || 1
-        const unitSalePrice = Math.round(((product.sale_price || 0) / pcsInPack) * 100) / 100
-        const unitPurchasePrice = (product.trade_price || 0) / pcsInPack
+        const latestPI = db.prepare(`
+          SELECT pi.id, pi.expiry_date, pi.sale_price, pi.purchase_price, pi.pcs_in_pack, pi.profit_percent, pi.batch_no
+          FROM purchase_items pi
+          JOIN purchases pu ON pu.id = pi.purchase_id
+          WHERE pi.product_id = ?
+          ORDER BY pu.created_at DESC LIMIT 1
+        `).get(pId)
+
+        const pcsInPack = latestPI?.pcs_in_pack || product.pcs_in_pack || 1
+        const salePrice = latestPI?.sale_price || product.sale_price || 0
+        const tradePrice = latestPI?.purchase_price || product.trade_price || 0
+        const profitPct = latestPI?.profit_percent || 0
+
+        const unitSalePrice = Math.round((salePrice / pcsInPack) * 100) / 100
+        const unitPurchasePrice = profitPct ? unitSalePrice * (1 - profitPct / 100) : tradePrice / pcsInPack
+
         rawAllocations.push({
-          batch_id: null,
+          batch_id: latestPI?.id || null,
           qty: requestedQty,
           unit_sale_price: unitSalePrice,
           unit_purchase_price: unitPurchasePrice,
-          profit_percent: 0,
-          expiry_date: '',
+          profit_percent: profitPct,
+          expiry_date: latestPI?.expiry_date || '',
           remaining: 0,
           pcs_in_pack: pcsInPack
         })
@@ -400,13 +425,15 @@ module.exports = (ipcMain) => {
         const prevCost = lastGroup.purchase_price * lastGroup.qty
         const currCost = alloc.unit_purchase_price * alloc.qty
         lastGroup.qty += alloc.qty
-        lastGroup.purchase_price = (prevCost + currCost) / lastGroup.qty
+        lastGroup.purchase_price = lastGroup.qty > 0 ? (prevCost + currCost) / lastGroup.qty : alloc.unit_purchase_price
         lastGroup.total = Math.round(lastGroup.qty * lastGroup.sale_price * 100) / 100
-        lastGroup.splits.push({
-          purchase_item_id: alloc.batch_id,
-          qty: alloc.qty,
-          expiry_date: alloc.expiry_date
-        })
+        if (alloc.batch_id) {
+          lastGroup.splits.push({
+            purchase_item_id: alloc.batch_id,
+            qty: alloc.qty,
+            expiry_date: alloc.expiry_date
+          })
+        }
       } else {
         // Different price -> create separate group!
         const profitPct = alloc.profit_percent !== null && alloc.profit_percent !== undefined && alloc.profit_percent !== 0
@@ -418,7 +445,7 @@ module.exports = (ipcMain) => {
           name: product.name,
           category: product.category_name || '',
           rack_location: product.rack_location || 'N/A',
-          manufacturer_name: product.company_name || '—',
+          manufacturer_name: product.company_name || product.generic_name || '—',
           purchase_item_id: alloc.batch_id,
           expiry_date: alloc.expiry_date,
           qty: alloc.qty,
@@ -430,11 +457,11 @@ module.exports = (ipcMain) => {
           current_stock: alloc.remaining,
           total_stock: totalStock,
           pcs_in_pack: alloc.pcs_in_pack,
-          splits: [{
+          splits: alloc.batch_id ? [{
             purchase_item_id: alloc.batch_id,
             qty: alloc.qty,
             expiry_date: alloc.expiry_date
-          }]
+          }] : []
         })
       }
     }

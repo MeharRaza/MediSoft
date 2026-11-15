@@ -2,11 +2,15 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { api } from '../../lib/api'
 import { fmt, Badge, Modal } from '../../components/ui'
 import InvoicePrint from '../../components/InvoicePrint'
+import InAppAlert from '../../components/InAppAlert'
 import { useNavigate } from 'react-router-dom'
 
 export default function FastBilling() {
   const navigate = useNavigate()
   const [items, setItems] = useState([])
+  const [inAppAlert, setInAppAlert] = useState(null)
+  const showAlert = useCallback((cfg) => setInAppAlert(cfg), [])
+  const closeAlert = useCallback(() => setInAppAlert(null), [])
   const [searchQ, setSearchQ] = useState('')
   const [searchResults, setSearchResults] = useState([])
   const [selectedIndex, setSelectedIndex] = useState(-1) // For keyboard navigation
@@ -405,6 +409,16 @@ export default function FastBilling() {
   const handleSearchKeyDown = (e) => {
     if (searchResults.length === 0) return
 
+    // Ctrl+H shortcut directly from search dropdown to view history
+    if (e.ctrlKey && e.key.toLowerCase() === 'h') {
+      e.preventDefault()
+      e.stopPropagation()
+      if (selectedIndex >= 0 && searchResults[selectedIndex]) {
+        openHistoryPopup({ product_id: searchResults[selectedIndex].id, name: searchResults[selectedIndex].name })
+      }
+      return
+    }
+
     switch(e.key) {
       case 'ArrowDown':
         e.preventDefault()
@@ -613,16 +627,6 @@ export default function FastBilling() {
   const addItem = async (product) => {
     const availableStock = parseFloat(product.stock) || 0
     
-    // STRICT CHECK: Item must have purchase record AND stock > 0
-    if (!product.current_purchase_item_id || availableStock <= 0) {
-      alert(`❌ Cannot add "${product.name}"!\n\nThis item is OUT OF STOCK (Available: ${availableStock}) or has no purchase entry in system.\n\nPlease complete purchase entry first.`)
-      setSearchQ('')
-      setSearchResults([])
-      setSelectedIndex(-1)
-      searchRef.current?.focus()
-      return
-    }
-    
     setSearchQ('')
     setSearchResults([])
     setSelectedIndex(-1)
@@ -632,9 +636,51 @@ export default function FastBilling() {
       .filter(i => i.product_id === product.id)
       .reduce((sum, i) => sum + (parseFloat(i.qty) || 0), 0)
 
+    // ZERO STOCK CASE: Allow adding to cart with qty = 0 so user can view history (Ctrl+H)
+    if (availableStock <= 0) {
+      const existingIdx = items.findIndex(i => i.product_id === product.id)
+      if (existingIdx !== -1) {
+        inputRefs.current[`${existingIdx}-qty`]?.focus()
+        inputRefs.current[`${existingIdx}-qty`]?.select()
+        return
+      }
+
+      try {
+        const groups = await api.inventory.getFifoSplits(product.id, 0)
+        if (!groups || groups.length === 0) return
+
+        const mappedGroups = groups.map(g => ({
+          ...g,
+          qty: 0,
+          total_stock: 0,
+          current_stock: 0,
+          discount_percent: 0,
+          total: 0
+        }))
+
+        setItems(prev => {
+          const updated = [...prev, ...mappedGroups]
+          const targetFocusIndex = updated.length - 1
+          setTimeout(() => {
+            inputRefs.current[`${targetFocusIndex}-qty`]?.focus()
+            inputRefs.current[`${targetFocusIndex}-qty`]?.select()
+          }, 100)
+          return updated
+        })
+      } catch (err) {
+        console.error('Failed to add zero stock item to cart:', err)
+      }
+      return
+    }
+
+    // NORMAL STOCK CASE (availableStock > 0)
     const targetQty = currentQtyInCart + 1
     if (targetQty > availableStock) {
-      alert(`❌ Cannot add more "${product.name}"!\n\nOnly ${availableStock} in stock.`)
+      showAlert({
+        title: 'Stock Limit Reached',
+        message: `Only ${availableStock} available in stock for "${product.name}". Cannot add more.`,
+        type: 'warning'
+      })
       return
     }
 
@@ -676,15 +722,24 @@ export default function FastBilling() {
     const targetItem = items[idx]
     if (!targetItem || targetItem.price_overridden) return
 
+    const maxStock = parseFloat(targetItem.total_stock) || 0
+    if (maxStock <= 0) {
+      // Out of stock product, remain 0
+      return
+    }
+
     // Calculate total quantity requested for this product across cart
     const productItems = items.filter(i => i.product_id === targetItem.product_id)
-    const totalRequestedQty = productItems.reduce((sum, i) => sum + (parseFloat(i.qty) || 0), 0)
+    let totalRequestedQty = productItems.reduce((sum, i) => sum + (parseFloat(i.qty) || 0), 0)
     if (totalRequestedQty <= 0) return
 
-    const maxStock = parseFloat(targetItem.total_stock) || 0
     if (maxStock > 0 && totalRequestedQty > maxStock) {
-      alert(`❌ Cannot enter ${totalRequestedQty} qty for "${targetItem.name}".\n\nOnly ${maxStock} available in stock!`)
-      return
+      showAlert({
+        title: 'Stock Limit Exceeded',
+        message: `Only ${maxStock} available in stock for "${targetItem.name}". Quantity adjusted to ${maxStock}.`,
+        type: 'warning'
+      })
+      totalRequestedQty = maxStock
     }
 
     try {
@@ -726,8 +781,22 @@ export default function FastBilling() {
     if (field === 'qty') {
       const enteredQty = parseFloat(value) || 0
       const maxStock = parseFloat(updated[idx].total_stock || updated[idx].current_stock) || 0
-      if (maxStock > 0 && enteredQty > maxStock) {
-        alert(`❌ Cannot enter ${enteredQty} qty for "${updated[idx].name}".\n\nOnly ${maxStock} available in stock!`)
+      
+      if (maxStock <= 0) {
+        if (enteredQty > 0) {
+          showAlert({
+            title: 'Item Out of Stock',
+            message: `"${updated[idx].name}" is OUT OF STOCK (0 in stock). Quantity cannot be set above 0.`,
+            type: 'warning'
+          })
+        }
+        value = 0
+      } else if (enteredQty > maxStock) {
+        showAlert({
+          title: 'Stock Limit Exceeded',
+          message: `Only ${maxStock} available in stock for "${updated[idx].name}". Quantity adjusted to ${maxStock}.`,
+          type: 'warning'
+        })
         value = maxStock
       }
       // Quantity modified: clear stale splits so old batch qty is never used
@@ -783,11 +852,29 @@ export default function FastBilling() {
   const handleFinishSale = useCallback(async () => {
     if (items.length === 0) return
     
-    // Check for zero-stock or unpurchased items
-    const invalidItems = items.filter(item => !item.purchase_item_id || parseFloat(item.qty) <= 0)
+    // Check for zero-stock, zero-qty, or unpurchased items
+    const invalidItems = items.filter(item => 
+      !item.purchase_item_id || 
+      (parseFloat(item.qty) || 0) <= 0 || 
+      (parseFloat(item.total_stock) || 0) <= 0 ||
+      (parseFloat(item.qty) || 0) > (parseFloat(item.total_stock) || 0)
+    )
     if (invalidItems.length > 0) {
-      const names = invalidItems.map(i => `${i.name} (Qty: ${i.qty})`).join('\n')
-      alert(`❌ Cannot save bill!\n\nThe following items have invalid quantity or no purchase entry:\n\n${names}\n\nPlease remove these items or complete purchase entry before saving.`)
+      const names = invalidItems.map(i => `• ${i.name} (Stock: ${i.total_stock || 0}, Qty: ${i.qty})`).join('\n')
+      showAlert({
+        title: 'Cannot Save Bill — Out of Stock Item',
+        message: `The following item(s) cannot be billed because they are out of stock or have 0 quantity:\n\n${names}\n\nPlease remove them before completing the sale.`,
+        type: 'warning',
+        actionLabel: 'Remove Out-of-Stock Items',
+        onAction: () => {
+          setItems(prev => prev.filter(i => 
+            (parseFloat(i.qty) || 0) > 0 && 
+            (parseFloat(i.total_stock) || 0) > 0 && 
+            (parseFloat(i.qty) || 0) <= (parseFloat(i.total_stock) || 0) &&
+            i.purchase_item_id
+          ))
+        }
+      })
       return
     }
     
@@ -833,14 +920,6 @@ export default function FastBilling() {
       })
       setSuccess(result.invoice_no || 'INV')
       
-      // DISABLED: Invoice printing (no printer available yet)
-      // try {
-      //   const invoiceDetails = await api.sales.getInvoiceById(result.id)
-      //   setPrintInvoice(invoiceDetails)
-      // } catch (e) {
-      //   console.error('Failed to fetch invoice for printing:', e)
-      // }
-      
       // If this was a held bill, remove it from held bills
       if (currentBillIndex >= 0) {
         const saved = localStorage.getItem('fastBilling_heldBills')
@@ -856,20 +935,42 @@ export default function FastBilling() {
       setSaving(false)
       setTimeout(() => { setSuccess(null); searchRef.current?.focus() }, 2500)
     } catch (e) {
-      alert('Error: ' + e.message)
+      showAlert({
+        title: 'Sale Error',
+        message: e.message || 'An error occurred while saving invoice.',
+        type: 'error'
+      })
       setSaving(false)
     }
-  }, [items, selectedCustomer, paymentMethod, subTotal, grossTotal, totalDiscAmt, grandTotalDiscount, grandTotal, paidAmount, change, currentBillIndex, heldBills])
+  }, [items, selectedCustomer, paymentMethod, subTotal, grossTotal, totalDiscAmt, grandTotalDiscount, grandTotal, paidAmount, change, currentBillIndex, heldBills, showAlert])
   
   // Save and Print - for Ctrl+P
   const handleFinishSaleWithPrint = useCallback(async () => {
     if (items.length === 0) return
     
-    // Check for zero-stock or unpurchased items
-    const invalidItems = items.filter(item => !item.purchase_item_id || parseFloat(item.qty) <= 0)
+    // Check for zero-stock, zero-qty, or unpurchased items
+    const invalidItems = items.filter(item => 
+      !item.purchase_item_id || 
+      (parseFloat(item.qty) || 0) <= 0 || 
+      (parseFloat(item.total_stock) || 0) <= 0 ||
+      (parseFloat(item.qty) || 0) > (parseFloat(item.total_stock) || 0)
+    )
     if (invalidItems.length > 0) {
-      const names = invalidItems.map(i => `${i.name} (Qty: ${i.qty})`).join('\n')
-      alert(`❌ Cannot save bill!\n\nThe following items have invalid quantity or no purchase entry:\n\n${names}\n\nPlease remove these items or complete purchase entry before saving.`)
+      const names = invalidItems.map(i => `• ${i.name} (Stock: ${i.total_stock || 0}, Qty: ${i.qty})`).join('\n')
+      showAlert({
+        title: 'Cannot Save Bill — Out of Stock Item',
+        message: `The following item(s) cannot be billed because they are out of stock or have 0 quantity:\n\n${names}\n\nPlease remove them before saving.`,
+        type: 'warning',
+        actionLabel: 'Remove Out-of-Stock Items',
+        onAction: () => {
+          setItems(prev => prev.filter(i => 
+            (parseFloat(i.qty) || 0) > 0 && 
+            (parseFloat(i.total_stock) || 0) > 0 && 
+            (parseFloat(i.qty) || 0) <= (parseFloat(i.total_stock) || 0) &&
+            i.purchase_item_id
+          ))
+        }
+      })
       return
     }
     
@@ -949,10 +1050,14 @@ export default function FastBilling() {
       setSaving(false)
       setTimeout(() => { setSuccess(null); searchRef.current?.focus() }, 2500)
     } catch (e) {
-      alert('Error: ' + e.message)
+      showAlert({
+        title: 'Sale Error',
+        message: e.message || 'An error occurred while saving invoice.',
+        type: 'error'
+      })
       setSaving(false)
     }
-  }, [items, selectedCustomer, paymentMethod, subTotal, grossTotal, totalDiscAmt, grandTotalDiscount, grandTotal, paidAmount, change, currentBillIndex, heldBills])
+  }, [items, selectedCustomer, paymentMethod, subTotal, grossTotal, totalDiscAmt, grandTotalDiscount, grandTotal, paidAmount, change, currentBillIndex, heldBills, showAlert])
   
   // Hold current bill and start new one
   const handleHoldBill = useCallback(() => {
@@ -960,7 +1065,11 @@ export default function FastBilling() {
     
     if (items.length === 0) {
       console.log('⚠️ Cart is empty, showing alert')
-      alert('Cart is empty. Nothing to hold.')
+      showAlert({
+        title: 'Hold Bill',
+        message: 'Cart is empty. Nothing to hold.',
+        type: 'info'
+      })
       return
     }
     
@@ -1007,7 +1116,7 @@ export default function FastBilling() {
     
     searchRef.current?.focus()
     console.log('✅ handleHoldBill completed successfully')
-  }, [items, selectedCustomer, paymentMethod, paidAmount, percentDiscount, flatDiscount, currentBillIndex])
+  }, [items, selectedCustomer, paymentMethod, paidAmount, percentDiscount, flatDiscount, currentBillIndex, showAlert])
   
   // Update ref whenever handleFinishSale changes
   useEffect(() => {
@@ -1019,7 +1128,11 @@ export default function FastBilling() {
   // Navigate between held bills
   const navigateBill = (direction) => {
     if (heldBills.length === 0) {
-      alert('No held bills available')
+      showAlert({
+        title: 'Held Bills',
+        message: 'No held bills available.',
+        type: 'info'
+      })
       return
     }
     
@@ -1417,11 +1530,12 @@ export default function FastBilling() {
             </thead>
             <tbody>
               {items.length === 0 ? (
-                <tr><td colSpan={9} className="px-4 py-16 text-center">
+                <tr><td colSpan={10} className="px-4 py-16 text-center">
                   <span className="material-symbols-outlined text-[48px] text-[#c3c6d5] block mb-2">shopping_cart</span>
                   <p className="text-[13px] text-[#737784]">Search and add products above</p>
                 </td></tr>
               ) : items.map((item, idx) => {
+                const isOutOfStock = (parseFloat(item.total_stock) || 0) <= 0 || (parseFloat(item.qty) || 0) <= 0
                 // Calculate remaining stock after this sale for CURRENT PURCHASE ENTRY
                 const currentRemaining = Math.max(0, (parseFloat(item.current_stock) || 0) - (parseFloat(item.qty) || 0))
                 const pcsInPack = item.pcs_in_pack || 1
@@ -1438,10 +1552,17 @@ export default function FastBilling() {
                 
                 return (
                 <React.Fragment key={idx}>
-                  <tr className="hover:bg-[#f7f9fb] group transition-colors border-b border-[#eceef0]">
+                  <tr className={`hover:bg-[#f7f9fb] group transition-colors border-b border-[#eceef0] ${isOutOfStock ? 'bg-red-50/40' : ''}`}>
                     <td className="px-3 py-2 text-[11px] font-mono text-[#737784]">{idx + 1}</td>
                     <td className="px-3 py-2">
-                      <p className="text-[12px] font-semibold text-[#191c1e]">{item.name}</p>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <p className="text-[12px] font-semibold text-[#191c1e]">{item.name}</p>
+                        {isOutOfStock && (
+                          <span className="px-1.5 py-0.5 bg-red-100 border border-red-200 text-red-700 text-[9px] font-bold rounded">
+                            OUT OF STOCK
+                          </span>
+                        )}
+                      </div>
                       <p className="text-[10px] text-[#737784]">{item.category}</p>
                     </td>
                     <td className="px-3 py-2">
@@ -1458,16 +1579,20 @@ export default function FastBilling() {
                         ref={setInputRef(idx, 'qty')}
                         type="number" 
                         value={item.qty} 
-                        min="0.01" 
+                        min="0" 
                         step="1"
-                        onChange={e => updateItem(idx, 'qty', parseFloat(e.target.value) || 1)}
+                        onChange={e => updateItem(idx, 'qty', parseFloat(e.target.value) || 0)}
                         onBlur={() => handleQtyCommit(idx)}
                         onKeyDown={e => {
                           if (e.key === 'Enter') handleQtyCommit(idx)
                           handleCartKeyDown(e, idx, 'qty')
                         }}
                         onFocus={e => e.target.select()}
-                        className="w-16 px-2 py-1 text-right border border-[#c3c6d5] rounded text-[12px] focus:border-[#003c90] focus:ring-2 focus:ring-[#003c90]/20 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        className={`w-16 px-2 py-1 text-right border rounded text-[12px] focus:ring-2 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+                          isOutOfStock 
+                            ? 'border-red-300 bg-red-50/50 text-red-700 font-bold focus:border-red-500 focus:ring-red-200' 
+                            : 'border-[#c3c6d5] focus:border-[#003c90] focus:ring-[#003c90]/20'
+                        }`}
                       />
                     </td>
                     <td className="px-3 py-2 text-right">
@@ -1508,67 +1633,92 @@ export default function FastBilling() {
                       {fmt(item.total)}
                     </td>
                     <td className="px-3 py-2 text-center">
-                      <button 
-                        ref={el => {
-                          if (el) {
-                            inputRefs.current[`${idx}-delete-btn`] = el
-                          }
-                        }}
-                        onClick={() => removeItem(idx)}
-                        onKeyDown={e => handleCartKeyDown(e, idx, 'delete')}
-                        className="px-2.5 py-1 bg-white hover:bg-red-50 border border-red-300 rounded text-red-600 hover:text-red-700 text-[11px] font-semibold transition-colors focus:ring-2 focus:ring-red-300 focus:outline-none"
-                      >
-                        Del
-                      </button>
+                      <div className="flex items-center justify-center gap-1.5">
+                        <button 
+                          type="button"
+                          onClick={() => openHistoryPopup(item)}
+                          title="View Sales History (Ctrl+H)"
+                          className="p-1 text-[#003c90] hover:bg-blue-50 border border-blue-200 rounded transition-colors focus:ring-2 focus:ring-[#003c90]/30"
+                        >
+                          <span className="material-symbols-outlined text-[15px] block">history</span>
+                        </button>
+                        <button 
+                          type="button"
+                          ref={el => {
+                            if (el) {
+                              inputRefs.current[`${idx}-delete-btn`] = el
+                            }
+                          }}
+                          onClick={() => removeItem(idx)}
+                          onKeyDown={e => handleCartKeyDown(e, idx, 'delete')}
+                          className="px-2 py-1 bg-white hover:bg-red-50 border border-red-300 rounded text-red-600 hover:text-red-700 text-[11px] font-semibold transition-colors focus:ring-2 focus:ring-red-300 focus:outline-none"
+                        >
+                          Del
+                        </button>
+                      </div>
                     </td>
                   </tr>
                   {/* Remaining Stock Inline Row */}
-                  <tr className="hover:bg-[#f7f9fb] border-b border-[#eceef0]">
-                    <td colSpan={9} className="px-3 pb-2 pt-0">
+                  <tr className={`border-b border-[#eceef0] ${isOutOfStock ? 'bg-red-50/20' : 'hover:bg-[#f7f9fb]'}`}>
+                    <td colSpan={10} className="px-3 pb-2 pt-0">
                       <div className="space-y-0.5">
-                        {/* Current Purchase Entry Stock */}
-                        <p className={`text-[10px] font-semibold ${
-                          totalRemaining < 0 
-                            ? 'text-red-600' 
-                            : currentRemaining < 5 
-                              ? 'text-amber-600' 
-                              : 'text-green-600'
-                        }`}>
-                          {item.splits && item.splits.length > 1 ? (
-                            <>
-                              <span className="material-symbols-outlined text-[12px] inline-block align-middle mr-1 text-blue-600">call_split</span>
-                              Multi-batch line: <span className="font-bold text-[#003c90]">{item.qty} pills</span> (from {item.splits.length} batches @ {fmt(item.sale_price)})
-                            </>
-                          ) : currentRemaining === 0 ? (
-                            <>
-                              Current Batch: <span className="font-bold text-amber-700">0 remaining (Fully allocated)</span>
-                            </>
-                          ) : (
-                            <>
-                              Current Batch Remaining: <span className="font-bold">{currentRemaining} pills</span>
-                              {pcsInPack > 1 && currentBoxes >= 0 && (
+                        {isOutOfStock ? (
+                          <div className="flex items-center gap-2 flex-wrap pt-0.5">
+                            <span className="font-bold text-red-700 bg-red-100/90 border border-red-200 px-2 py-0.5 rounded text-[10px] inline-flex items-center gap-1">
+                              <span className="material-symbols-outlined text-[12px]">warning</span>
+                              OUT OF STOCK (0 Available)
+                            </span>
+                            <span className="text-[10px] text-[#737784]">
+                              Item added for history inspection • Press <kbd className="px-1.5 py-0.5 bg-white border border-[#c3c6d5] rounded font-mono text-[9px] text-[#003c90] font-bold shadow-xs">Ctrl+H</kbd> to view sales history
+                            </span>
+                          </div>
+                        ) : (
+                          <>
+                            {/* Current Purchase Entry Stock */}
+                            <p className={`text-[10px] font-semibold ${
+                              totalRemaining < 0 
+                                ? 'text-red-600' 
+                                : currentRemaining < 5 
+                                  ? 'text-amber-600' 
+                                  : 'text-green-600'
+                            }`}>
+                              {item.splits && item.splits.length > 1 ? (
+                                <>
+                                  <span className="material-symbols-outlined text-[12px] inline-block align-middle mr-1 text-blue-600">call_split</span>
+                                  Multi-batch line: <span className="font-bold text-[#003c90]">{item.qty} pills</span> (from {item.splits.length} batches @ {fmt(item.sale_price)})
+                                </>
+                              ) : currentRemaining === 0 ? (
+                                <>
+                                  Current Batch: <span className="font-bold text-amber-700">0 remaining (Fully allocated)</span>
+                                </>
+                              ) : (
+                                <>
+                                  Current Batch Remaining: <span className="font-bold">{currentRemaining} pills</span>
+                                  {pcsInPack > 1 && currentBoxes >= 0 && (
+                                    <span className="ml-1">
+                                      ({currentBoxes} box{currentBoxes !== 1 ? 'es' : ''} + {currentLoose} loose)
+                                    </span>
+                                  )}
+                                </>
+                              )}
+                            </p>
+                            {/* Total Stock (All Purchase Entries) */}
+                            <p className={`text-[9px] font-medium ${
+                              totalRemaining < 0 
+                                ? 'text-red-600' 
+                                : totalRemaining < 10 
+                                  ? 'text-amber-600' 
+                                  : 'text-[#737784]'
+                            }`}>
+                              Total Stock Remaining: <span className="font-semibold">{totalRemaining} pills</span>
+                              {pcsInPack > 1 && totalBoxes >= 0 && (
                                 <span className="ml-1">
-                                  ({currentBoxes} box{currentBoxes !== 1 ? 'es' : ''} + {currentLoose} loose)
+                                  ({totalBoxes} box{totalBoxes !== 1 ? 'es' : ''} + {totalLoose} loose)
                                 </span>
                               )}
-                            </>
-                          )}
-                        </p>
-                        {/* Total Stock (All Purchase Entries) */}
-                        <p className={`text-[9px] font-medium ${
-                          totalRemaining < 0 
-                            ? 'text-red-600' 
-                            : totalRemaining < 10 
-                              ? 'text-amber-600' 
-                              : 'text-[#737784]'
-                        }`}>
-                          Total Stock Remaining: <span className="font-semibold">{totalRemaining} pills</span>
-                          {pcsInPack > 1 && totalBoxes >= 0 && (
-                            <span className="ml-1">
-                              ({totalBoxes} box{totalBoxes !== 1 ? 'es' : ''} + {totalLoose} loose)
-                            </span>
-                          )}
-                        </p>
+                            </p>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -1905,6 +2055,17 @@ export default function FastBilling() {
           </div>
         ) : null}
       </Modal>
+
+      {/* In-App Alert Dialog (replaces native window alerts) */}
+      <InAppAlert
+        open={!!inAppAlert}
+        onClose={closeAlert}
+        title={inAppAlert?.title}
+        message={inAppAlert?.message}
+        type={inAppAlert?.type || 'warning'}
+        actionLabel={inAppAlert?.actionLabel}
+        onAction={inAppAlert?.onAction}
+      />
     </div>
   )
 }

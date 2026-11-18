@@ -38,6 +38,7 @@ import CompanySettings from './pages/settings/CompanySettings'
 import InvoiceSettings from './pages/settings/InvoiceSettings'
 import UserManagement from './pages/settings/UserManagement'
 import BranchManagement from './pages/settings/BranchManagement'
+import TerminalSettings from './pages/settings/TerminalSettings'
 
 // ─── HARDWARE LICENSE GUARD ──────────────────────────────
 function LicenseGuard({ children }) {
@@ -144,6 +145,7 @@ export default function App() {
           <Route path="settings/invoice"  element={<InvoiceSettings />} />
           <Route path="settings/users"    element={<UserManagement />} />
           <Route path="settings/branches" element={<BranchManagement />} />
+          <Route path="settings/terminals" element={<TerminalSettings />} />
         </Route>
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>

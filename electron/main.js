@@ -279,6 +279,13 @@ app.whenReady().then(() => {
 
   // Register all IPC handlers
   try {
+    const ipcHandlersMap = {}
+    const originalHandle = ipcMain.handle.bind(ipcMain)
+    ipcMain.handle = (channel, listener) => {
+      ipcHandlersMap[channel] = listener
+      return originalHandle(channel, listener)
+    }
+
     require('./ipc/sales')(ipcMain)
     require('./ipc/purchase')(ipcMain)
     require('./ipc/inventory')(ipcMain)
@@ -289,6 +296,8 @@ app.whenReady().then(() => {
     require('./ipc/settings')(ipcMain)
     require('./ipc/fix-pcs')(ipcMain)
     require('./ipc/license')(ipcMain, app)
+    const terminalManager = require('./server/terminalManager')
+    terminalManager.registerTerminalIPC(ipcMain, app, ipcHandlersMap)
     setupUpdaterIPC()
     logDebug('All IPC handlers registered successfully')
     console.log('[MediSoft] All IPC handlers registered.')

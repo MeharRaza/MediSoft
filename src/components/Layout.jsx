@@ -1,5 +1,5 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useAuthStore } from '../store/authStore'
 import { api } from '../lib/api'
 import { Modal, Btn, Input } from './ui'
@@ -68,8 +68,9 @@ const navItems = [
     children: [
       { label: 'Company', path: '/settings/company', icon: 'business' },
       { label: 'Invoice Print', path: '/settings/invoice', icon: 'receipt_long' },
-      { label: 'Users', path: '/settings/users', icon: 'group' },
+      { label: 'Users & Cashiers', path: '/settings/users', icon: 'group' },
       { label: 'Branches', path: '/settings/branches', icon: 'store' },
+      { label: 'Terminals & LAN', path: '/settings/terminals', icon: 'lan' },
     ]
   },
 ]
@@ -83,7 +84,8 @@ export default function Layout() {
   const navigate = useNavigate()
   const [clock, setClock] = useState(new Date().toLocaleTimeString())
   const [storeName, setStoreName] = useState('MediSoft Pharmacy')
-  const [appVersion, setAppVersion] = useState('v1.5.6')
+  const [appVersion, setAppVersion] = useState('v1.5.7')
+  const [licensePlan, setLicensePlan] = useState(null)
 
   // Account / Change Credentials Modal State
   const [accountModalOpen, setAccountModalOpen] = useState(false)
@@ -104,6 +106,12 @@ export default function Layout() {
     if (window.api?.updater?.getVersion) {
       window.api.updater.getVersion().then(v => {
         if (v?.current) setAppVersion('v' + v.current.replace(/^v/, ''))
+      }).catch(() => {})
+    }
+
+    if (window.api?.license?.getStatus) {
+      window.api.license.getStatus().then(lic => {
+        if (lic?.license?.plan) setLicensePlan(lic.license.plan)
       }).catch(() => {})
     }
 
@@ -163,10 +171,40 @@ export default function Layout() {
     return () => clearInterval(timer)
   }, [])
 
+  // Filter navigation items based on User Rights / Cashier Permissions
+  const authorizedNavItems = useMemo(() => {
+    if (!user) return navItems
+    if (user.role === 'admin' || user.rights?.all) return navItems
+
+    const rights = user.rights || {}
+
+    return navItems.map(group => {
+      // Top-level category access
+      if (group.label === 'Purchase' && !rights['inventory.purchases']) return null
+      if (group.label === 'Accounts' && !rights['reports.financial']) return null
+      if (group.label === 'HRM' && !rights['settings.access']) return null
+      if (group.label === 'Reports' && !rights['reports.financial']) return null
+      if (group.label === 'Settings' && !rights['settings.access']) return null
+
+      // Filter child items
+      const filteredChildren = group.children?.filter(child => {
+        if (child.path === '/sales/history' && !rights['billing.history']) return false
+        if (child.path === '/sales/return' && !rights['billing.returns']) return false
+        if (child.path.startsWith('/purchase/') && !rights['inventory.purchases']) return false
+        if (child.path.startsWith('/reports/') && !rights['reports.financial']) return false
+        if (child.path.startsWith('/settings/') && !rights['settings.access']) return false
+        return true
+      })
+
+      if (!filteredChildren || filteredChildren.length === 0) return null
+      return { ...group, children: filteredChildren }
+    }).filter(Boolean)
+  }, [user])
+
   // Build flat menu list for keyboard navigation
   const flatMenuItems = [
     { label: 'Dashboard', path: '/dashboard', type: 'link' },
-    ...navItems.flatMap(parent => {
+    ...authorizedNavItems.flatMap(parent => {
       const items = [{ label: parent.label, type: 'parent', parentLabel: parent.label }]
       if (openMenu === parent.label) {
         items.push(...parent.children.map(child => ({ 
@@ -416,11 +454,28 @@ export default function Layout() {
         )}
         
         {/* Logo */}
-        <div className="px-5 py-5 border-b border-[#c3c6d5]">
+        <div className="px-5 py-4 border-b border-[#c3c6d5]">
           <h1 className="text-[18px] font-bold text-[#003c90] truncate" title={storeName} style={{ fontFamily: 'Hanken Grotesk' }}>
             {storeName}
           </h1>
           <p className="text-[10px] text-[#737784] tracking-widest font-semibold">PHARMACY MANAGEMENT</p>
+
+          {/* Upgrade pill if on Basic / Starter Plan */}
+          {licensePlan && (licensePlan.toLowerCase().includes('starter') || licensePlan.toLowerCase().includes('basic')) && (
+            <button
+              onClick={() => navigate('/settings/terminals')}
+              title="Click to view Store Pro multi-counter upgrade"
+              className="mt-2.5 w-full px-2.5 py-1.5 bg-gradient-to-r from-amber-50 to-orange-50 hover:from-amber-100 hover:to-orange-100 border border-amber-300 text-amber-900 text-[10px] font-bold rounded-lg flex items-center justify-between transition-all shadow-sm group"
+            >
+              <span className="flex items-center gap-1">
+                <span className="material-symbols-outlined text-[14px] text-amber-600">workspace_premium</span>
+                Basic Plan
+              </span>
+              <span className="text-[9px] font-extrabold uppercase text-[#003c90] group-hover:translate-x-0.5 transition-transform flex items-center">
+                Upgrade &gt;&gt;
+              </span>
+            </button>
+          )}
         </div>
 
         {/* Quick Billing */}
@@ -445,8 +500,8 @@ export default function Layout() {
             Dashboard
           </NavLink>
 
-          {navItems.map((item, parentIdx) => {
-            const parentIndex = 1 + navItems.slice(0, parentIdx).reduce((sum, prev) => 
+          {authorizedNavItems.map((item, parentIdx) => {
+            const parentIndex = 1 + authorizedNavItems.slice(0, parentIdx).reduce((sum, prev) => 
               sum + 1 + (openMenu === prev.label ? prev.children.length : 0), 0
             )
             

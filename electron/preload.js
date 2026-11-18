@@ -23,6 +23,12 @@ contextBridge.exposeInMainWorld('api', {
     activate:   (key) => ipcRenderer.invoke('license:activate', key),
     deactivate: () => ipcRenderer.invoke('license:deactivate'),
   },
+  // Multi-Counter LAN & Terminal Mode
+  terminal: {
+    getStatus:  () => ipcRenderer.invoke('terminal:getStatus'),
+    saveConfig: (cfg) => ipcRenderer.invoke('terminal:saveConfig', cfg),
+    getLocalIp: () => ipcRenderer.invoke('terminal:getLocalIp'),
+  },
   // No custom print handlers
   // Sales
   sales: {

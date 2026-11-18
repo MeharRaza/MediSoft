@@ -1,5 +1,20 @@
-// Unified API layer — works in both Electron and browser (dev mock)
+// Unified API layer — routes seamlessly between Local Electron IPC, LAN RPC (for Cashier Terminals), and Dev Mocks
+import { rpcCall } from './lanClient'
+
 const isElectron = typeof window !== 'undefined' && window.api
+
+// Helper to route through RPC when in Cashier mode, or local IPC when Standalone / Server
+function call(channel, fallbackDev, ...args) {
+  return rpcCall(channel, () => {
+    if (isElectron) {
+      const [ns, method] = channel.split(':')
+      if (window.api?.[ns]?.[method]) {
+        return window.api[ns][method](...args)
+      }
+    }
+    return fallbackDev ? fallbackDev(...args) : Promise.resolve(null)
+  }, ...args)
+}
 
 // Mock data for browser dev mode
 const mockData = {
@@ -33,107 +48,104 @@ const mockData = {
 
 export const api = {
   sales: {
-    createInvoice:   (data) => isElectron ? window.api.sales.createInvoice(data) : Promise.resolve({ success: true, invoice_no: 'INV-MOCK' }),
-    getInvoices:     (f) => isElectron ? window.api.sales.getInvoices(f) : Promise.resolve([]),
-    getInvoiceById:  (id) => isElectron ? window.api.sales.getInvoiceById(id) : Promise.resolve(null),
-    createReturn:    (data) => isElectron ? window.api.sales.createReturn(data) : Promise.resolve({ success: true }),
-    getReturns:      (f) => isElectron ? window.api.sales.getReturns(f) : Promise.resolve([]),
-    getQuotations:   () => isElectron ? window.api.sales.getQuotations() : Promise.resolve([]),
-    createQuotation: (data) => isElectron ? window.api.sales.createQuotation(data) : Promise.resolve({ success: true }),
-    convertQuotation:(id) => isElectron ? window.api.sales.convertQuotation(id) : Promise.resolve({ success: true }),
-    getCustomers:    () => isElectron ? window.api.sales.getCustomers() : Promise.resolve(mockData.customers),
-    createCustomer:  (data) => isElectron ? window.api.sales.createCustomer(data) : Promise.resolve({ success: true, id: 99 }),
-    updateCustomer:  (data) => isElectron ? window.api.sales.updateCustomer(data) : Promise.resolve({ success: true }),
-    deleteCustomer:  (id) => isElectron ? window.api.sales.deleteCustomer(id) : Promise.resolve({ success: true }),
-    getProductHistory: (productId) => isElectron ? window.api.sales.getProductHistory(productId) : Promise.resolve({ history: [], stats: { total_sales: 0, total_quantity: 0, avg_price: 0, max_price: 0, min_price: 0 } }),
+    createInvoice:   (data) => call('sales:createInvoice', () => Promise.resolve({ success: true, invoice_no: 'INV-MOCK' }), data),
+    getInvoices:     (f) => call('sales:getInvoices', () => Promise.resolve([]), f),
+    getInvoiceById:  (id) => call('sales:getInvoiceById', () => Promise.resolve(null), id),
+    createReturn:    (data) => call('sales:createReturn', () => Promise.resolve({ success: true }), data),
+    getReturns:      (f) => call('sales:getReturns', () => Promise.resolve([]), f),
+    getQuotations:   () => call('sales:getQuotations', () => Promise.resolve([])),
+    createQuotation: (data) => call('sales:createQuotation', () => Promise.resolve({ success: true }), data),
+    convertQuotation:(id) => call('sales:convertQuotation', () => Promise.resolve({ success: true }), id),
+    getCustomers:    () => call('sales:getCustomers', () => Promise.resolve(mockData.customers)),
+    createCustomer:  (data) => call('sales:createCustomer', () => Promise.resolve({ success: true, id: 99 }), data),
+    updateCustomer:  (data) => call('sales:updateCustomer', () => Promise.resolve({ success: true }), data),
+    deleteCustomer:  (id) => call('sales:deleteCustomer', () => Promise.resolve({ success: true }), id),
+    getProductHistory: (productId) => call('sales:getProductHistory', () => Promise.resolve({ history: [], stats: { total_sales: 0, total_quantity: 0, avg_price: 0, max_price: 0, min_price: 0 } }), productId),
   },
   purchase: {
-    getNextInvoiceNo:() => isElectron ? window.api.purchase.getNextInvoiceNo() : Promise.resolve('INV-0001'),
-    getSupplierProducts: (id) => isElectron ? window.api.purchase.getSupplierProducts(id) : Promise.resolve([]),
-    getSupplierCompanies: (id) => isElectron ? window.api.purchase.getSupplierCompanies(id) : Promise.resolve([]),
-    addSupplierCompanies: (data) => isElectron ? window.api.purchase.addSupplierCompanies(data) : Promise.resolve({ success: true }),
-    getProductsByCompany: (name) => isElectron ? window.api.purchase.getProductsByCompany(name) : Promise.resolve([]),
-    createPurchase:  (data) => isElectron ? window.api.purchase.createPurchase(data) : Promise.resolve({ success: true }),
-    getPurchases:    (f) => isElectron ? window.api.purchase.getPurchases(f) : Promise.resolve([]),
-    getPurchaseById: (id) => isElectron ? window.api.purchase.getPurchaseById(id) : Promise.resolve(null),
-    createReturn:    (data) => isElectron ? window.api.purchase.createReturn(data) : Promise.resolve({ success: true }),
-    getReturns:      () => isElectron ? window.api.purchase.getReturns() : Promise.resolve([]),
-    getSuppliers:    () => isElectron ? window.api.purchase.getSuppliers() : Promise.resolve(mockData.suppliers),
-    createSupplier:  (data) => isElectron ? window.api.purchase.createSupplier(data) : Promise.resolve({ success: true, id: 99 }),
-    updateSupplier:  (data) => isElectron ? window.api.purchase.updateSupplier(data) : Promise.resolve({ success: true }),
-    deleteSupplier:  (id) => isElectron ? window.api.purchase.deleteSupplier(id) : Promise.resolve({ success: true }),
-    createPO:        (data) => isElectron ? window.api.purchase.createPO(data) : Promise.resolve({ success: true }),
-    getPOs:          () => isElectron ? window.api.purchase.getPOs() : Promise.resolve([]),
+    getNextInvoiceNo:() => call('purchase:getNextInvoiceNo', () => Promise.resolve('INV-0001')),
+    getSupplierProducts: (id) => call('purchase:getSupplierProducts', () => Promise.resolve([]), id),
+    getSupplierCompanies: (id) => call('purchase:getSupplierCompanies', () => Promise.resolve([]), id),
+    addSupplierCompanies: (data) => call('purchase:addSupplierCompanies', () => Promise.resolve({ success: true }), data),
+    getProductsByCompany: (name) => call('purchase:getProductsByCompany', () => Promise.resolve([]), name),
+    createPurchase:  (data) => call('purchase:createPurchase', () => Promise.resolve({ success: true }), data),
+    getPurchases:    (f) => call('purchase:getPurchases', () => Promise.resolve([]), f),
+    getPurchaseById: (id) => call('purchase:getPurchaseById', () => Promise.resolve(null), id),
+    createReturn:    (data) => call('purchase:createReturn', () => Promise.resolve({ success: true }), data),
+    getReturns:      () => call('purchase:getReturns', () => Promise.resolve([])),
+    getSuppliers:    () => call('purchase:getSuppliers', () => Promise.resolve(mockData.suppliers)),
+    createSupplier:  (data) => call('purchase:createSupplier', () => Promise.resolve({ success: true, id: 99 }), data),
+    updateSupplier:  (data) => call('purchase:updateSupplier', () => Promise.resolve({ success: true }), data),
+    deleteSupplier:  (id) => call('purchase:deleteSupplier', () => Promise.resolve({ success: true }), id),
+    createPO:        (data) => call('purchase:createPO', () => Promise.resolve({ success: true }), data),
+    getPOs:          () => call('purchase:getPOs', () => Promise.resolve([])),
   },
   inventory: {
-    getProducts:     (f) => isElectron ? window.api.inventory.getProducts(f) : Promise.resolve(mockData.products),
-    searchProduct:   (q) => isElectron ? window.api.inventory.searchProduct(q) : Promise.resolve(mockData.products.filter(p => p.name.toLowerCase().includes(q.toLowerCase()))),
-    createProduct:   (data) => isElectron ? window.api.inventory.createProduct(data) : Promise.resolve({ success: true, id: 99 }),
-    updateProduct:   (data) => isElectron ? window.api.inventory.updateProduct(data) : Promise.resolve({ success: true }),
-    deleteProduct:   (id) => isElectron ? window.api.inventory.deleteProduct(id) : Promise.resolve({ success: true }),
-    getBatches:      (id) => isElectron ? window.api.inventory.getBatches(id) : Promise.resolve([]),
-    getFifoSplits:   (productId, qty) => isElectron ? window.api.inventory.getFifoSplits(productId, qty) : Promise.resolve([]),
-    getAllBatches:   (f) => isElectron ? window.api.inventory.getAllBatches(f) : Promise.resolve([]),
-    updatePurchaseItemExpiry: (data) => isElectron ? window.api.inventory.updatePurchaseItemExpiry(data) : Promise.resolve({ success: true }),
-    adjustStock:     (data) => isElectron ? window.api.inventory.adjustStock(data) : Promise.resolve({ success: true }),
-    transferStock:   (data) => isElectron ? window.api.inventory.transferStock(data) : Promise.resolve({ success: true }),
-    getCategories:   () => isElectron ? window.api.inventory.getCategories() : Promise.resolve(mockData.categories),
-    createCategory:  (data) => isElectron ? window.api.inventory.createCategory(data) : Promise.resolve({ success: true }),
-    getExpiryAlerts: () => isElectron ? window.api.inventory.getExpiryAlerts() : Promise.resolve([]),
-    getLowStock:     () => isElectron ? window.api.inventory.getLowStock() : Promise.resolve(mockData.products.filter(p => p.stock <= p.alert_qty)),
+    getProducts:     (f) => call('inventory:getProducts', () => Promise.resolve(mockData.products), f),
+    searchProduct:   (q) => call('inventory:searchProduct', () => Promise.resolve(mockData.products.filter(p => p.name.toLowerCase().includes(q.toLowerCase()))), q),
+    createProduct:   (data) => call('inventory:createProduct', () => Promise.resolve({ success: true, id: 99 }), data),
+    updateProduct:   (data) => call('inventory:updateProduct', () => Promise.resolve({ success: true }), data),
+    deleteProduct:   (id) => call('inventory:deleteProduct', () => Promise.resolve({ success: true }), id),
+    getBatches:      (id) => call('inventory:getBatches', () => Promise.resolve([]), id),
+    getFifoSplits:   (productId, qty) => call('inventory:getFifoSplits', () => Promise.resolve([]), productId, qty),
+    getAllBatches:   (f) => call('inventory:getAllBatches', () => Promise.resolve([]), f),
+    updatePurchaseItemExpiry: (data) => call('inventory:updatePurchaseItemExpiry', () => Promise.resolve({ success: true }), data),
+    adjustStock:     (data) => call('inventory:adjustStock', () => Promise.resolve({ success: true }), data),
+    transferStock:   (data) => call('inventory:transferStock', () => Promise.resolve({ success: true }), data),
+    getCategories:   () => call('inventory:getCategories', () => Promise.resolve(mockData.categories)),
+    createCategory:  (data) => call('inventory:createCategory', () => Promise.resolve({ success: true }), data),
+    getExpiryAlerts: () => call('inventory:getExpiryAlerts', () => Promise.resolve([])),
+    getLowStock:     () => call('inventory:getLowStock', () => Promise.resolve(mockData.products.filter(p => p.stock <= p.alert_qty))),
   },
   accounts: {
-    getLedger:       (f) => isElectron ? window.api.accounts.getLedger(f) : Promise.resolve([]),
-    createVoucher:   (data) => isElectron ? window.api.accounts.createVoucher(data) : Promise.resolve({ success: true }),
-    getVouchers:     (f) => isElectron ? window.api.accounts.getVouchers(f) : Promise.resolve([]),
-    getAccounts:     () => isElectron ? window.api.accounts.getAccounts() : Promise.resolve([]),
-    createAccount:   (data) => isElectron ? window.api.accounts.createAccount(data) : Promise.resolve({ success: true }),
-    getRecoveries:   () => isElectron ? window.api.accounts.getRecoveries() : Promise.resolve([]),
-    createRecovery:  (data) => isElectron ? window.api.accounts.createRecovery(data) : Promise.resolve({ success: true }),
-    getDashboard:    () => isElectron ? window.api.accounts.getDashboard() : Promise.resolve({ totalAssets: 0, totalLiabilities: 0, totalIncome: 0, totalExpense: 0, pendingReceivable: 4920, pendingPayable: 40000, recentVouchers: [] }),
+    getLedger:       (f) => call('accounts:getLedger', () => Promise.resolve([]), f),
+    createVoucher:   (data) => call('accounts:createVoucher', () => Promise.resolve({ success: true }), data),
+    getVouchers:     (f) => call('accounts:getVouchers', () => Promise.resolve([]), f),
+    getAccounts:     () => call('accounts:getAccounts', () => Promise.resolve([])),
+    createAccount:   (data) => call('accounts:createAccount', () => Promise.resolve({ success: true }), data),
+    getRecoveries:   () => call('accounts:getRecoveries', () => Promise.resolve([])),
+    createRecovery:  (data) => call('accounts:createRecovery', () => Promise.resolve({ success: true }), data),
+    getDashboard:    () => call('accounts:getDashboard', () => Promise.resolve({ totalAssets: 0, totalLiabilities: 0, totalIncome: 0, totalExpense: 0, pendingReceivable: 4920, pendingPayable: 40000, recentVouchers: [] })),
   },
   hrm: {
-    getEmployees:    () => isElectron ? window.api.hrm.getEmployees() : Promise.resolve(mockData.employees),
-    createEmployee:  (data) => isElectron ? window.api.hrm.createEmployee(data) : Promise.resolve({ success: true }),
-    updateEmployee:  (data) => isElectron ? window.api.hrm.updateEmployee(data) : Promise.resolve({ success: true }),
-    deleteEmployee:  (id) => isElectron ? window.api.hrm.deleteEmployee(id) : Promise.resolve({ success: true }),
-    getPayroll:      (m) => isElectron ? window.api.hrm.getPayroll(m) : Promise.resolve([]),
-    generatePayroll: (m) => isElectron ? window.api.hrm.generatePayroll(m) : Promise.resolve({ count: 0 }),
-    getLeaves:       (f) => isElectron ? window.api.hrm.getLeaves(f) : Promise.resolve([]),
-    createLeave:     (data) => isElectron ? window.api.hrm.createLeave(data) : Promise.resolve({ success: true }),
-    updateLeave:     (data) => isElectron ? window.api.hrm.updateLeave(data) : Promise.resolve({ success: true }),
+    getEmployees:    () => call('hrm:getEmployees', () => Promise.resolve(mockData.employees)),
+    createEmployee:  (data) => call('hrm:createEmployee', () => Promise.resolve({ success: true }), data),
+    updateEmployee:  (data) => call('hrm:updateEmployee', () => Promise.resolve({ success: true }), data),
+    deleteEmployee:  (id) => call('hrm:deleteEmployee', () => Promise.resolve({ success: true }), id),
+    getPayroll:      (m) => call('hrm:getPayroll', () => Promise.resolve([]), m),
+    generatePayroll: (m) => call('hrm:generatePayroll', () => Promise.resolve({ count: 0 }), m),
+    getLeaves:       (f) => call('hrm:getLeaves', () => Promise.resolve([]), f),
+    createLeave:     (data) => call('hrm:createLeave', () => Promise.resolve({ success: true }), data),
+    updateLeave:     (data) => call('hrm:updateLeave', () => Promise.resolve({ success: true }), data),
   },
   reports: {
-    getSalesSummary:    (f) => isElectron ? window.api.reports.getSalesSummary(f) : Promise.resolve({ summary: {}, daily: [], topProducts: [], invoices: [] }),
-    getPurchaseSummary: (f) => isElectron ? window.api.reports.getPurchaseSummary(f) : Promise.resolve({ summary: {}, bySupplier: [], invoices: [] }),
-    getStockReport:     (f) => isElectron ? window.api.reports.getStockReport(f) : Promise.resolve({ products: mockData.products, totalValue: 0 }),
-    getProfitLoss:      (f) => isElectron ? window.api.reports.getProfitLoss(f) : Promise.resolve({ revenue: 0, cogs: 0, grossProfit: 0, expenses: [], totalExpenses: 0, netProfit: 0 }),
-    getAccountsReport:  (f) => isElectron ? window.api.reports.getAccountsReport(f) : Promise.resolve({ accounts: [], ledger: [] }),
-    getExpiryReport:    (f) => isElectron ? window.api.reports.getExpiryReport(f) : Promise.resolve({ expired: [], expiring30: [], expiring90: [] }),
+    getSalesSummary:    (f) => call('reports:getSalesSummary', () => Promise.resolve({ summary: {}, daily: [], topProducts: [], invoices: [] }), f),
+    getPurchaseSummary: (f) => call('reports:getPurchaseSummary', () => Promise.resolve({ summary: {}, bySupplier: [], invoices: [] }), f),
+    getStockReport:     (f) => call('reports:getStockReport', () => Promise.resolve({ products: mockData.products, totalValue: 0 }), f),
+    getProfitLoss:      (f) => call('reports:getProfitLoss', () => Promise.resolve({ revenue: 0, cogs: 0, grossProfit: 0, expenses: [], totalExpenses: 0, netProfit: 0 }), f),
+    getAccountsReport:  (f) => call('reports:getAccountsReport', () => Promise.resolve({ accounts: [], ledger: [] }), f),
+    getExpiryReport:    (f) => call('reports:getExpiryReport', () => Promise.resolve({ expired: [], expiring30: [], expiring90: [] }), f),
   },
   expenses: {
-    getExpenses:      (f) => isElectron ? window.api.expenses.getExpenses(f) : Promise.resolve([]),
-    getTotalExpenses: (f) => isElectron ? window.api.expenses.getTotalExpenses(f) : Promise.resolve(0),
-    createExpense:    (data) => isElectron ? window.api.expenses.createExpense(data) : Promise.resolve({ success: true, id: 99 }),
-    updateExpense:    (data) => isElectron ? window.api.expenses.updateExpense(data) : Promise.resolve({ success: true }),
-    deleteExpense:    (id) => isElectron ? window.api.expenses.deleteExpense(id) : Promise.resolve({ success: true }),
-    getCategories:    () => isElectron ? window.api.expenses.getCategories() : Promise.resolve([]),
+    getExpenses:      (f) => call('expenses:getExpenses', () => Promise.resolve([]), f),
+    getTotalExpenses: (f) => call('expenses:getTotalExpenses', () => Promise.resolve(0), f),
+    createExpense:    (data) => call('expenses:createExpense', () => Promise.resolve({ success: true, id: 99 }), data),
+    updateExpense:    (data) => call('expenses:updateExpense', () => Promise.resolve({ success: true }), data),
+    deleteExpense:    (id) => call('expenses:deleteExpense', () => Promise.resolve({ success: true }), id),
+    getCategories:    () => call('expenses:getCategories', () => Promise.resolve([])),
   },
   settings: {
-    getUsers:        () => isElectron ? window.api.settings.getUsers() : Promise.resolve([]),
-    createUser:        (data) => isElectron ? window.api.settings.createUser(data) : Promise.resolve({ success: true }),
-    updateUser:        (data) => isElectron ? window.api.settings.updateUser(data) : Promise.resolve({ success: true }),
-    changeCredentials: (data) => isElectron ? window.api.settings.changeCredentials(data) : Promise.resolve({ success: true, message: 'Updated (Dev)' }),
-    deleteUser:        (id) => isElectron ? window.api.settings.deleteUser(id) : Promise.resolve({ success: true }),
-    getBranches:     () => isElectron ? window.api.settings.getBranches() : Promise.resolve(mockData.branches),
-    createBranch:    (data) => isElectron ? window.api.settings.createBranch(data) : Promise.resolve({ success: true }),
-    updateBranch:    (data) => isElectron ? window.api.settings.updateBranch(data) : Promise.resolve({ success: true }),
-    getCompanyInfo:  () => isElectron ? window.api.settings.getCompanyInfo() : Promise.resolve({ name: 'MediSoft Pharmacy', currency: 'PKR', tax_rate: 0 }),
-    saveCompanyInfo: (data) => isElectron ? window.api.settings.saveCompanyInfo(data) : Promise.resolve({ success: true }),
-    getInvoiceSettings: () => {
-      if (isElectron && window.api?.settings?.getInvoiceSettings) {
-        return window.api.settings.getInvoiceSettings()
-      }
+    getUsers:          () => call('settings:getUsers', () => Promise.resolve([])),
+    createUser:        (data) => call('settings:createUser', () => Promise.resolve({ success: true }), data),
+    updateUser:        (data) => call('settings:updateUser', () => Promise.resolve({ success: true }), data),
+    changeCredentials: (data) => call('settings:changeCredentials', () => Promise.resolve({ success: true, message: 'Updated' }), data),
+    deleteUser:        (id) => call('settings:deleteUser', () => Promise.resolve({ success: true }), id),
+    getBranches:       () => call('settings:getBranches', () => Promise.resolve(mockData.branches)),
+    createBranch:      (data) => call('settings:createBranch', () => Promise.resolve({ success: true }), data),
+    updateBranch:      (data) => call('settings:updateBranch', () => Promise.resolve({ success: true }), data),
+    getCompanyInfo:    () => call('settings:getCompanyInfo', () => Promise.resolve({ name: 'MediSoft Pharmacy', currency: 'PKR', tax_rate: 0 })),
+    saveCompanyInfo:   (data) => call('settings:saveCompanyInfo', () => Promise.resolve({ success: true }), data),
+    getInvoiceSettings: () => call('settings:getInvoiceSettings', () => {
       try {
         const saved = localStorage.getItem('medisoft_invoice_settings')
         if (saved) return Promise.resolve(JSON.parse(saved))
@@ -168,22 +180,28 @@ export const api = {
         footer_terms_bold: 0,
         thank_you_bold: 0
       })
-    },
-    saveInvoiceSettings: (data) => {
+    }),
+    saveInvoiceSettings: (data) => call('settings:saveInvoiceSettings', () => {
       try {
         localStorage.setItem('medisoft_invoice_settings', JSON.stringify(data))
       } catch (e) {}
-      if (isElectron && window.api?.settings?.saveInvoiceSettings) {
-        return window.api.settings.saveInvoiceSettings(data)
-      }
       return Promise.resolve({ success: true })
-    },
+    }, data),
+    login: (data) => isElectron && window.api?.settings?.login ? window.api.settings.login(data) : Promise.resolve({ success: true, user: { id: 1, full_name: 'Administrator', role: 'admin' } }),
+    logout: () => isElectron && window.api?.settings?.logout ? window.api.settings.logout() : Promise.resolve({ success: true }),
+    getCurrentUser: () => isElectron && window.api?.settings?.getCurrentUser ? window.api.settings.getCurrentUser() : Promise.resolve(null),
   },
   dashboard: {
-    getStats: () => isElectron ? window.api.dashboard.getStats() : Promise.resolve({
+    getStats: () => call('dashboard:getStats', () => Promise.resolve({
       todaySales: 24582, todaySalesCount: 42, todayPurchase: 56000, lowStock: 18,
       expiryAlerts: 7, pendingRecovery: 34200, profitToday: 8124,
       recentSales: [], weeklySales: [],
-    }),
+    })),
   },
+  // Machine-local Terminal & LAN Settings (always local to this PC)
+  terminal: {
+    getStatus:  () => isElectron && window.api?.terminal ? window.api.terminal.getStatus() : Promise.resolve({ mode: 'standalone', serverIp: '127.0.0.1', serverPort: 8088, localIp: '127.0.0.1', counterName: 'Main Counter', isServerRunning: false }),
+    saveConfig: (cfg) => isElectron && window.api?.terminal ? window.api.terminal.saveConfig(cfg) : Promise.resolve({ success: true, config: cfg }),
+    getLocalIp: () => isElectron && window.api?.terminal ? window.api.terminal.getLocalIp() : Promise.resolve('127.0.0.1'),
+  }
 }

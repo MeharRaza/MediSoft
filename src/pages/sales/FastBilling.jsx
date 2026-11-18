@@ -4,9 +4,17 @@ import { fmt, Badge, Modal } from '../../components/ui'
 import InvoicePrint from '../../components/InvoicePrint'
 import InAppAlert from '../../components/InAppAlert'
 import { useNavigate } from 'react-router-dom'
+import { useAuthStore } from '../../store/authStore'
+import { onLanEvent } from '../../lib/lanClient'
 
 export default function FastBilling() {
   const navigate = useNavigate()
+  const user = useAuthStore(s => s.user)
+  const isAdmin = user?.role === 'admin' || Boolean(user?.rights?.all)
+  const canDiscount = isAdmin || Boolean(user?.rights?.['billing.discount'])
+  const canViewProfit = isAdmin || Boolean(user?.rights?.['inventory.view_profit'])
+  const canViewHistory = isAdmin || Boolean(user?.rights?.['billing.history'])
+
   const [items, setItems] = useState([])
   const [inAppAlert, setInAppAlert] = useState(null)
   const showAlert = useCallback((cfg) => setInAppAlert(cfg), [])
@@ -227,6 +235,14 @@ export default function FastBilling() {
       if (e.ctrlKey && e.key.toLowerCase() === 'f') {
         e.preventDefault()
         e.stopPropagation()
+        if (!canDiscount) {
+          showAlert({
+            type: 'warning',
+            title: 'Access Restricted',
+            message: 'Custom discounts are locked for your cashier account.'
+          })
+          return
+        }
         document.getElementById('flat-discount-input')?.focus()
         document.getElementById('flat-discount-input')?.select()
         return
@@ -236,6 +252,14 @@ export default function FastBilling() {
       if (e.ctrlKey && e.key.toLowerCase() === 't') {
         e.preventDefault()
         e.stopPropagation()
+        if (!canDiscount) {
+          showAlert({
+            type: 'warning',
+            title: 'Access Restricted',
+            message: 'Custom discounts are locked for your cashier account.'
+          })
+          return
+        }
         document.getElementById('percent-discount-input')?.focus()
         document.getElementById('percent-discount-input')?.select()
         return
@@ -403,6 +427,22 @@ export default function FastBilling() {
       })
     }, 60)
     return () => clearTimeout(t)
+  }, [searchQ])
+
+  // Live Multi-Counter Stock Sync: auto-refresh search results when other cashiers make a sale
+  useEffect(() => {
+    const unsubscribe = onLanEvent((event) => {
+      if (event?.type === 'sale:created' || event?.type === 'stock:updated') {
+        if (searchQ && searchQ.trim()) {
+          api.inventory.searchProduct(searchQ).then(results => {
+            setSearchResults(Array.isArray(results) ? results : [])
+          }).catch(() => {})
+        }
+      }
+    })
+    return () => {
+      if (unsubscribe) unsubscribe()
+    }
   }, [searchQ])
 
   // Keyboard navigation for search results
@@ -612,6 +652,14 @@ export default function FastBilling() {
 
   // Open item history popup
   const openHistoryPopup = async (item) => {
+    if (!canViewHistory) {
+      showAlert({
+        type: 'warning',
+        title: 'Access Restricted',
+        message: 'Medicine sales history is locked for your cashier account.'
+      })
+      return
+    }
     setHistoryPopup({ product_id: item.product_id, name: item.name, data: null })
     setHistoryLoading(true)
     try {
@@ -1607,7 +1655,7 @@ export default function FastBilling() {
                           onFocus={e => e.target.select()}
                           className="w-24 px-2 py-1 text-right border border-[#c3c6d5] rounded text-[12px] font-mono focus:border-[#003c90] focus:ring-2 focus:ring-[#003c90]/20 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         />
-                        {item.profit_percent !== undefined && (
+                        {canViewProfit && item.profit_percent !== undefined && (
                           <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
                             item.profit_percent >= 0 ? 'text-green-600 bg-green-50' : 'text-red-600 bg-red-50'
                           }`}>
@@ -1621,12 +1669,18 @@ export default function FastBilling() {
                         ref={setInputRef(idx, 'discount_percent')}
                         type="number" 
                         value={item.discount_percent} 
+                        disabled={!canDiscount}
                         min="0" 
                         max="100"
                         onChange={e => updateItem(idx, 'discount_percent', parseFloat(e.target.value) || 0)}
                         onKeyDown={e => handleCartKeyDown(e, idx, 'discount_percent')}
                         onFocus={e => e.target.select()}
-                        className="w-14 px-2 py-1 text-right border border-[#c3c6d5] rounded text-[12px] focus:border-[#003c90] focus:ring-2 focus:ring-[#003c90]/20 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        className={`w-14 px-2 py-1 text-right border border-[#c3c6d5] rounded text-[12px] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+                          canDiscount
+                            ? 'focus:border-[#003c90] focus:ring-2 focus:ring-[#003c90]/20'
+                            : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                        }`}
+                        title={!canDiscount ? 'Discounts locked by Admin' : ''}
                       />
                     </td>
                     <td className="px-3 py-2 text-right text-[12px] font-bold font-mono text-[#003c90]">
@@ -1634,14 +1688,16 @@ export default function FastBilling() {
                     </td>
                     <td className="px-3 py-2 text-center">
                       <div className="flex items-center justify-center gap-1.5">
-                        <button 
-                          type="button"
-                          onClick={() => openHistoryPopup(item)}
-                          title="View Sales History (Ctrl+H)"
-                          className="p-1 text-[#003c90] hover:bg-blue-50 border border-blue-200 rounded transition-colors focus:ring-2 focus:ring-[#003c90]/30"
-                        >
-                          <span className="material-symbols-outlined text-[15px] block">history</span>
-                        </button>
+                        {canViewHistory && (
+                          <button 
+                            type="button"
+                            onClick={() => openHistoryPopup(item)}
+                            title="View Sales History (Ctrl+H)"
+                            className="p-1 text-[#003c90] hover:bg-blue-50 border border-blue-200 rounded transition-colors focus:ring-2 focus:ring-[#003c90]/30"
+                          >
+                            <span className="material-symbols-outlined text-[15px] block">history</span>
+                          </button>
+                        )}
                         <button 
                           type="button"
                           ref={el => {
@@ -1751,11 +1807,15 @@ export default function FastBilling() {
                   type="number"
                   id="percent-discount-input"
                   value={percentDiscount} 
+                  disabled={!canDiscount}
                   min="0" 
                   max="100"
                   onChange={e => setPercentDiscount(parseFloat(e.target.value) || 0)}
                   placeholder="0"
-                  className="flex-1 px-2 py-1.5 border border-[#c3c6d5] rounded text-[14px] font-mono text-right focus:border-[#003c90] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  className={`flex-1 px-2 py-1.5 border border-[#c3c6d5] rounded text-[14px] font-mono text-right [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+                    canDiscount ? 'focus:border-[#003c90]' : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                  }`}
+                  title={!canDiscount ? 'Discounts locked by Admin' : ''}
                 />
                 <span className="text-[11px] text-gray-600 w-12">% Off</span>
                 <span className="font-mono text-red-500 font-semibold w-24 text-right">- PKR {fmt(percentDiscAmt)}</span>
@@ -1770,11 +1830,15 @@ export default function FastBilling() {
                   type="number"
                   id="flat-discount-input"
                   value={flatDiscount} 
+                  disabled={!canDiscount}
                   min="0" 
                   max={afterPercent}
                   onChange={e => setFlatDiscount(parseFloat(e.target.value) || 0)}
                   placeholder="0"
-                  className="flex-1 px-2 py-1.5 border border-[#c3c6d5] rounded text-[14px] font-mono text-right focus:border-[#003c90] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  className={`flex-1 px-2 py-1.5 border border-[#c3c6d5] rounded text-[14px] font-mono text-right [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+                    canDiscount ? 'focus:border-[#003c90]' : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                  }`}
+                  title={!canDiscount ? 'Discounts locked by Admin' : ''}
                 />
                 <span className="text-[11px] text-gray-600 w-12">PKR</span>
                 <span className="font-mono text-red-500 font-semibold w-24 text-right">- PKR {fmt(flatDiscount)}</span>
@@ -1802,14 +1866,17 @@ export default function FastBilling() {
                 </div>
               )}
             </div>
-            <div className="flex justify-between items-center py-1.5 border-b border-[#eceef0]">
-              <span className="text-[#737784] font-medium flex items-center gap-1">
-                <span className="material-symbols-outlined text-[14px] text-green-600">trending_up</span>
-              </span>
-              <span className={`font-mono font-semibold ${finalProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                PKR {fmt(finalProfit)}
-              </span>
-            </div>
+            {canViewProfit && (
+              <div className="flex justify-between items-center py-1.5 border-b border-[#eceef0]">
+                <span className="text-[#737784] font-medium flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[14px] text-green-600">trending_up</span>
+                  Profit
+                </span>
+                <span className={`font-mono font-semibold ${finalProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  PKR {fmt(finalProfit)}
+                </span>
+              </div>
+            )}
             
             {/* Zero Stock Warning */}
             {items.some(item => item.stock <= 0 || item.qty === 0) && (

@@ -9,7 +9,9 @@ export default function TerminalSettings() {
     serverIp: '127.0.0.1',
     serverPort: 8088,
     counterName: 'Main Counter',
+    licenseKey: '',
     localIp: '127.0.0.1',
+    serverLicenseKey: '',
     isServerRunning: false
   })
   const [loading, setLoading] = useState(true)
@@ -72,6 +74,8 @@ export default function TerminalSettings() {
           serverIp: res.serverIp || '127.0.0.1',
           serverPort: res.serverPort || 8088,
           counterName: res.counterName || 'Main Counter',
+          licenseKey: res.licenseKey || '',
+          serverLicenseKey: res.serverLicenseKey || '',
           localIp: res.localIp || '127.0.0.1',
           isServerRunning: res.isServerRunning || false
         }))
@@ -109,7 +113,7 @@ export default function TerminalSettings() {
     setTestResult(null)
     setMsg(null)
 
-    const result = await checkServerHealth(config.serverIp, config.serverPort)
+    const result = await checkServerHealth(config.serverIp, config.serverPort, config.licenseKey)
     setTesting(false)
     setTestResult(result)
   }
@@ -129,7 +133,8 @@ export default function TerminalSettings() {
         mode: config.mode,
         serverIp: config.serverIp.trim(),
         serverPort: parseInt(config.serverPort) || 8088,
-        counterName: config.counterName.trim()
+        counterName: config.counterName.trim(),
+        licenseKey: (config.licenseKey || '').trim().toUpperCase()
       }
 
       const res = await api.terminal.saveConfig(payload)
@@ -138,7 +143,8 @@ export default function TerminalSettings() {
           mode: payload.mode,
           serverIp: payload.serverIp,
           serverPort: payload.serverPort,
-          counterName: payload.counterName
+          counterName: payload.counterName,
+          licenseKey: payload.licenseKey
         })
         setMsg({
           type: 'success',
@@ -431,6 +437,14 @@ export default function TerminalSettings() {
                 <p className="text-[11px] text-green-700 mt-1">
                   Both PCs must be connected to the same Wi-Fi router or Ethernet switch (No Internet Needed).
                 </p>
+                {config.serverLicenseKey && (
+                  <div className="mt-2 pt-2 border-t border-green-200">
+                    <p className="text-[10px] font-bold text-green-800 uppercase tracking-wider">Store Pro Pairing Key (Give to Cashier)</p>
+                    <code className="text-[13px] font-mono font-bold text-green-950 bg-white/80 px-2 py-0.5 rounded border border-green-300 inline-block mt-0.5 select-all">
+                      {config.serverLicenseKey}
+                    </code>
+                  </div>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <span className="px-3 py-1.5 bg-green-600 text-white text-[12px] font-bold rounded-lg flex items-center gap-1.5 shadow-sm">
@@ -490,14 +504,29 @@ export default function TerminalSettings() {
               </div>
             </div>
 
-            <div className="mb-4">
-              <Input
-                label="Cashier Counter Name"
-                value={config.counterName}
-                onChange={e => setConfig(c => ({ ...c, counterName: e.target.value }))}
-                placeholder="e.g. Counter 2 - Front Desk"
-              />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <div>
+                <Input
+                  label="Cashier Counter Name"
+                  value={config.counterName}
+                  onChange={e => setConfig(c => ({ ...c, counterName: e.target.value }))}
+                  placeholder="e.g. Counter 2 - Front Desk"
+                />
+              </div>
+              <div>
+                <Input
+                  label="Store Pro License Key (Pairing Key) *"
+                  value={config.licenseKey}
+                  onChange={e => setConfig(c => ({ ...c, licenseKey: e.target.value.toUpperCase() }))}
+                  placeholder="MSPRO-XXXX-XXXX-XXXX-XXXX"
+                  className="font-mono uppercase tracking-wider"
+                  required
+                />
+              </div>
             </div>
+            <p className="text-[11px] text-[#737784] -mt-2 mb-4">
+              Enter the exact Store Pro license key activated on your Main Server PC. Unauthorized devices on Wi-Fi without this key are blocked from connecting.
+            </p>
 
             {/* Test Connection Button & Result Box */}
             <div className="pt-2">

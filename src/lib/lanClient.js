@@ -5,6 +5,7 @@ let terminalState = {
   serverPort: 8088,
   localIp: '127.0.0.1',
   counterName: 'Main Counter',
+  licenseKey: '', // Store Pro License Key used to authenticate with Server Hub
   token: null,
   isInitialized: false
 };
@@ -55,23 +56,38 @@ export function setTerminalToken(token) {
 
 /**
  * Pings the server health endpoint and measures roundtrip latency.
+ * Verifies Store Pro License Key pairing with the Server PC.
  */
-export async function checkServerHealth(ip = terminalState.serverIp, port = terminalState.serverPort) {
+export async function checkServerHealth(
+  ip = terminalState.serverIp,
+  port = terminalState.serverPort,
+  licenseKey = terminalState.licenseKey
+) {
   const targetIp = (ip || '127.0.0.1').trim();
   const targetPort = port || 8088;
+  const targetKey = (licenseKey || terminalState.licenseKey || '').trim().toUpperCase();
   const url = `http://${targetIp}:${targetPort}/api/lan/health`;
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 3000);
+  const timeoutId = setTimeout(() => controller.abort(), 3500);
   const startTime = performance.now();
 
   try {
-    const res = await fetch(url, { signal: controller.signal });
+    const headers = {};
+    if (targetKey) {
+      headers['X-License-Key'] = targetKey;
+    }
+
+    const res = await fetch(url, { headers, signal: controller.signal });
     clearTimeout(timeoutId);
     const latency = Math.round(performance.now() - startTime);
 
     if (!res.ok) {
-      return { ok: false, error: `Server returned HTTP ${res.status}` };
+      const errData = await res.json().catch(() => ({}));
+      return {
+        ok: false,
+        error: errData.message || (res.status === 401 ? 'Unauthorized: Store Pro License Key does not match the Server PC.' : `Server returned HTTP ${res.status}`)
+      };
     }
 
     const data = await res.json();
@@ -96,18 +112,30 @@ export async function checkServerHealth(ip = terminalState.serverIp, port = term
 /**
  * Authenticates a cashier terminal with the Server PC.
  */
-export async function loginOverLan(username, password, ip = terminalState.serverIp, port = terminalState.serverPort) {
+export async function loginOverLan(
+  username,
+  password,
+  ip = terminalState.serverIp,
+  port = terminalState.serverPort,
+  licenseKey = terminalState.licenseKey
+) {
   const targetIp = (ip || '127.0.0.1').trim();
   const targetPort = port || 8088;
+  const targetKey = (licenseKey || terminalState.licenseKey || '').trim().toUpperCase();
   const url = `http://${targetIp}:${targetPort}/api/lan/login`;
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 5000);
 
   try {
+    const headers = { 'Content-Type': 'application/json' };
+    if (targetKey) {
+      headers['X-License-Key'] = targetKey;
+    }
+
     const res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ username, password }),
       signal: controller.signal
     });
@@ -142,7 +170,8 @@ export function connectEventStream() {
     sseConnection = null;
   }
 
-  const sseUrl = `http://${terminalState.serverIp}:${terminalState.serverPort}/api/lan/events`;
+  const targetKey = (terminalState.licenseKey || '').trim().toUpperCase();
+  const sseUrl = `http://${terminalState.serverIp}:${terminalState.serverPort}/api/lan/events?key=${encodeURIComponent(targetKey)}`;
   try {
     sseConnection = new EventSource(sseUrl);
     sseConnection.onmessage = (event) => {
@@ -183,7 +212,7 @@ export function onLanEvent(listener) {
 
 /**
  * Universal RPC Invoker:
- * In Cashier mode -> Calls Server PC over local LAN HTTP.
+ * In Cashier mode -> Calls Server PC over local LAN HTTP with License Key + Token.
  * In Standalone / Server mode -> Calls local handler directly.
  */
 export async function rpcCall(channel, localHandler, ...args) {
@@ -193,13 +222,19 @@ export async function rpcCall(channel, localHandler, ...args) {
 
   if (terminalState.mode === 'cashier') {
     const url = `http://${terminalState.serverIp}:${terminalState.serverPort}/api/lan/rpc`;
+    const targetKey = (terminalState.licenseKey || '').trim().toUpperCase();
     try {
+      const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': terminalState.token ? `Bearer ${terminalState.token}` : ''
+      };
+      if (targetKey) {
+        headers['X-License-Key'] = targetKey;
+      }
+
       const res = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': terminalState.token ? `Bearer ${terminalState.token}` : ''
-        },
+        headers,
         body: JSON.stringify({ channel, args })
       });
 

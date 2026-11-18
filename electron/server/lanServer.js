@@ -6,6 +6,7 @@ const db = require('../database');
 let serverInstance = null;
 let sseClients = [];
 let serverSecret = null;
+let activeServerLicenseKey = null;
 
 /**
  * Returns the primary local IPv4 address of this machine on the local network.
@@ -102,16 +103,19 @@ function readJsonBody(req) {
 /**
  * Start the Local LAN Hub HTTP server.
  */
-function startLanServer({ port = 8088, storeName = 'MediSoft Pharmacy', ipcHandlers = {} }) {
+function startLanServer({ port = 8088, storeName = 'MediSoft Pharmacy', ipcHandlers = {}, licenseKey = null }) {
   if (serverInstance) {
+    if (licenseKey) activeServerLicenseKey = licenseKey.trim().toUpperCase();
     return { success: true, alreadyRunning: true, ip: getLocalIpAddress(), port };
   }
+
+  activeServerLicenseKey = licenseKey ? licenseKey.trim().toUpperCase() : null;
 
   serverInstance = http.createServer(async (req, res) => {
     // Enable CORS for LAN terminals
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-License-Key');
 
     if (req.method === 'OPTIONS') {
       res.writeHead(204);
@@ -121,6 +125,25 @@ function startLanServer({ port = 8088, storeName = 'MediSoft Pharmacy', ipcHandl
 
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
     const pathname = url.pathname;
+
+    // Terminal Authorization Check: Verify Store Pro License Key
+    if (activeServerLicenseKey) {
+      const incomingKey = (
+        req.headers['x-license-key'] ||
+        url.searchParams.get('key') ||
+        ''
+      ).trim().toUpperCase();
+
+      if (incomingKey !== activeServerLicenseKey) {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          success: false,
+          error: 'UNAUTHORIZED_TERMINAL',
+          message: 'Access Denied: Terminal is not paired with this pharmacy Server. Invalid or missing Store Pro License Key.'
+        }));
+        return;
+      }
+    }
 
     // 1. Health & Discovery Endpoint
     if (pathname === '/api/lan/health' && req.method === 'GET') {
@@ -310,6 +333,7 @@ function stopLanServer() {
     sseClients = [];
     serverInstance.close();
     serverInstance = null;
+    activeServerLicenseKey = null;
     console.log('[LAN Server] Stopped.');
     return { success: true };
   }

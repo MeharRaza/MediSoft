@@ -33,7 +33,7 @@ export const useAuthStore = create((set, get) => ({
 
       // Cashier Mode: Authenticate against the Central Server PC over LAN
       if (terminal && terminal.mode === 'cashier') {
-        const result = await loginOverLan(username, password, terminal.serverIp, terminal.serverPort)
+        const result = await loginOverLan(username, password, terminal.serverIp, terminal.serverPort, terminal.licenseKey)
         if (result.success) {
           const user = normalizeUser(result.user)
           set({ user, loading: false })

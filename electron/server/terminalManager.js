@@ -10,6 +10,7 @@ const DEFAULT_CONFIG = {
   serverPort: 8088,
   serverIp: '127.0.0.1',
   counterName: 'Main Counter',
+  licenseKey: '', // Required on Cashier PC to authenticate with Server Hub
   pairingPin: '849201',
   pairedTerminals: []
 };
@@ -20,6 +21,18 @@ function getConfigPath(app) {
     configFilePath = path.join(userData, 'terminal_config.json');
   }
   return configFilePath;
+}
+
+function getActiveLicenseKey(app) {
+  try {
+    const licPath = path.join(app.getPath('userData'), 'medisoft_license.dat');
+    if (fs.existsSync(licPath)) {
+      const rec = JSON.parse(fs.readFileSync(licPath, 'utf8'));
+      const token = typeof rec.token === 'string' ? JSON.parse(rec.token) : rec.token;
+      return token?.key || null;
+    }
+  } catch (e) {}
+  return null;
 }
 
 function loadConfig(app) {
@@ -56,11 +69,13 @@ function saveConfig(app, newConfig) {
  */
 function registerTerminalIPC(ipcMain, app, ipcHandlersMap = {}) {
   const cfg = loadConfig(app);
+  const activeKey = getActiveLicenseKey(app);
 
   // Auto-start LAN server if configured in server mode
   if (cfg.mode === 'server') {
     lanServer.startLanServer({
       port: cfg.serverPort || 8088,
+      licenseKey: activeKey,
       ipcHandlers: ipcHandlersMap
     });
   }
@@ -69,12 +84,15 @@ function registerTerminalIPC(ipcMain, app, ipcHandlersMap = {}) {
   ipcMain.handle('terminal:getStatus', () => {
     const config = loadConfig(app);
     const localIp = lanServer.getLocalIpAddress();
+    const serverKey = getActiveLicenseKey(app);
     return {
       mode: config.mode,
       serverIp: config.serverIp,
       serverPort: config.serverPort,
       localIp,
       counterName: config.counterName,
+      licenseKey: config.licenseKey || '',
+      serverLicenseKey: serverKey,
       isServerRunning: config.mode === 'server'
     };
   });
@@ -86,8 +104,10 @@ function registerTerminalIPC(ipcMain, app, ipcHandlersMap = {}) {
 
     // Handle Server lifecycle
     if (newConfig.mode === 'server') {
+      const serverKey = getActiveLicenseKey(app);
       lanServer.startLanServer({
         port: newConfig.serverPort || 8088,
+        licenseKey: serverKey,
         ipcHandlers: ipcHandlersMap
       });
     } else {
@@ -104,8 +124,7 @@ function registerTerminalIPC(ipcMain, app, ipcHandlersMap = {}) {
 }
 
 module.exports = {
+  registerTerminalIPC,
   loadConfig,
-  saveConfig,
-  registerTerminalIPC
+  saveConfig
 };
-

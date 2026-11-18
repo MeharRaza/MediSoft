@@ -17,6 +17,7 @@ export default function Activation({ onActivated }) {
   const [serverIp, setServerIp] = useState('');
   const [serverPort, setServerPort] = useState(8088);
   const [counterName, setCounterName] = useState('Counter 1');
+  const [cashierKey, setCashierKey] = useState('');
   const [testingLan, setTestingLan] = useState(false);
   const [lanStatus, setLanStatus] = useState(null);
   const [savingLan, setSavingLan] = useState(false);
@@ -261,15 +262,27 @@ export default function Activation({ onActivated }) {
               />
             </div>
 
+            <Input
+              label="Store Pro License Key (Pairing Key) *"
+              placeholder="MSPRO-XXXX-XXXX-XXXX-XXXX"
+              value={cashierKey}
+              onChange={e => setCashierKey(e.target.value.toUpperCase())}
+              className="font-mono uppercase tracking-wider"
+              required
+            />
+            <p className="text-[10px] text-slate-500 -mt-2">
+              Enter the exact Store Pro license key from your Server PC to pair this counter.
+            </p>
+
             {lanStatus && (
               <div className={`p-2.5 rounded-lg text-[11px] font-semibold flex items-center gap-1.5 ${
-                lanStatus.online ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'
+                lanStatus.ok ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'
               }`}>
                 <span className="material-symbols-outlined text-[16px]">
-                  {lanStatus.online ? 'check_circle' : 'cancel'}
+                  {lanStatus.ok ? 'check_circle' : 'cancel'}
                 </span>
                 <span>
-                  {lanStatus.online ? `Server Online! Ping: ${lanStatus.ping}ms` : `Server Offline: ${lanStatus.error || 'Connection refused'}`}
+                  {lanStatus.ok ? `Server Paired & Online! Ping: ${lanStatus.latency}ms (${lanStatus.storeName || 'Pharmacy'})` : `Error: ${lanStatus.error || 'Connection refused'}`}
                 </span>
               </div>
             )}
@@ -279,22 +292,22 @@ export default function Activation({ onActivated }) {
                 type="button"
                 variant="outline"
                 className="flex-1"
-                disabled={testingLan || !serverIp.trim()}
+                disabled={testingLan || !serverIp.trim() || !cashierKey.trim()}
                 onClick={async () => {
                   setTestingLan(true);
                   setLanStatus(null);
-                  const res = await checkServerHealth(serverIp.trim(), parseInt(serverPort) || 8088);
+                  const res = await checkServerHealth(serverIp.trim(), parseInt(serverPort) || 8088, cashierKey.trim());
                   setTestingLan(false);
                   setLanStatus(res);
                 }}
               >
-                {testingLan ? 'Testing...' : 'Test Ping'}
+                {testingLan ? 'Testing...' : 'Test Ping & Pair'}
               </Btn>
               <Btn
                 type="button"
                 variant="primary"
                 className="flex-1"
-                disabled={savingLan || !serverIp.trim()}
+                disabled={savingLan || !serverIp.trim() || !cashierKey.trim()}
                 onClick={async () => {
                   setSavingLan(true);
                   try {
@@ -302,7 +315,8 @@ export default function Activation({ onActivated }) {
                       mode: 'cashier',
                       serverIp: serverIp.trim(),
                       serverPort: parseInt(serverPort) || 8088,
-                      counterName: counterName.trim() || 'Counter 1'
+                      counterName: counterName.trim() || 'Counter 1',
+                      licenseKey: cashierKey.trim().toUpperCase()
                     };
                     const res = await api.terminal.saveConfig(cfg);
                     if (res?.success) {

@@ -14,6 +14,7 @@ export default function Login() {
   const [netModalOpen, setNetModalOpen] = useState(false)
   const [serverIpInput, setServerIpInput] = useState('')
   const [serverPortInput, setServerPortInput] = useState(8088)
+  const [licenseKeyInput, setLicenseKeyInput] = useState('')
   const [savingNet, setSavingNet] = useState(false)
 
   const login = useAuthStore(s => s.login)
@@ -25,9 +26,10 @@ export default function Login() {
       setTerminalInfo(t)
       setServerIpInput(t.serverIp || '127.0.0.1')
       setServerPortInput(t.serverPort || 8088)
+      setLicenseKeyInput(t.licenseKey || '')
 
       if (t.mode === 'cashier') {
-        checkServerHealth(t.serverIp, t.serverPort).then(res => {
+        checkServerHealth(t.serverIp, t.serverPort, t.licenseKey).then(res => {
           setServerStatus(res)
         })
       }
@@ -48,24 +50,28 @@ export default function Login() {
   const handleSaveNetworkConfig = async () => {
     setSavingNet(true)
     try {
+      const cleanKey = (licenseKeyInput || '').trim().toUpperCase()
       const res = await api.terminal.saveConfig({
         mode: 'cashier',
         serverIp: serverIpInput.trim(),
-        serverPort: parseInt(serverPortInput) || 8088
+        serverPort: parseInt(serverPortInput) || 8088,
+        licenseKey: cleanKey
       })
       if (res?.success) {
         updateTerminalState({
           mode: 'cashier',
           serverIp: serverIpInput.trim(),
-          serverPort: parseInt(serverPortInput) || 8088
+          serverPort: parseInt(serverPortInput) || 8088,
+          licenseKey: cleanKey
         })
-        const ping = await checkServerHealth(serverIpInput.trim(), parseInt(serverPortInput) || 8088)
+        const ping = await checkServerHealth(serverIpInput.trim(), parseInt(serverPortInput) || 8088, cleanKey)
         setServerStatus(ping)
         setTerminalInfo(prev => ({
           ...prev,
           mode: 'cashier',
           serverIp: serverIpInput.trim(),
-          serverPort: parseInt(serverPortInput) || 8088
+          serverPort: parseInt(serverPortInput) || 8088,
+          licenseKey: cleanKey
         }))
         setNetModalOpen(false)
       }
@@ -193,20 +199,36 @@ export default function Login() {
             Configure whether this PC connects as a Cashier Terminal to a Central Server PC or operates independently.
           </p>
 
-          <Input
-            label="Server PC IP Address"
-            value={serverIpInput}
-            onChange={e => setServerIpInput(e.target.value)}
-            placeholder="e.g. 192.168.1.15"
-          />
+          <div className="grid grid-cols-3 gap-2">
+            <div className="col-span-2">
+              <Input
+                label="Server PC IP Address"
+                value={serverIpInput}
+                onChange={e => setServerIpInput(e.target.value)}
+                placeholder="e.g. 192.168.1.15"
+              />
+            </div>
+            <div>
+              <Input
+                label="Port"
+                type="number"
+                value={serverPortInput}
+                onChange={e => setServerPortInput(e.target.value)}
+                placeholder="8088"
+              />
+            </div>
+          </div>
 
           <Input
-            label="Server Port"
-            type="number"
-            value={serverPortInput}
-            onChange={e => setServerPortInput(e.target.value)}
-            placeholder="8088"
+            label="Store Pro License Key (Pairing Key) *"
+            value={licenseKeyInput}
+            onChange={e => setLicenseKeyInput(e.target.value.toUpperCase())}
+            placeholder="MSPRO-XXXX-XXXX-XXXX-XXXX"
+            className="font-mono uppercase tracking-wider"
           />
+          <p className="text-[11px] text-[#737784] -mt-2">
+            Enter the same Store Pro key used on the Server PC.
+          </p>
 
           <div className="flex justify-end gap-2 pt-3 border-t border-[#c3c6d5]">
             <Btn variant="outline" onClick={() => setNetModalOpen(false)}>

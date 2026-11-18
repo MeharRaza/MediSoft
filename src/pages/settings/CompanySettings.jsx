@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { api } from '../../lib/api'
-import { PageHeader, Card, Btn, Input, Select } from '../../components/ui'
+import { PageHeader, Card, Btn, Input, Select, Modal } from '../../components/ui'
 
 const CURRENCIES = [{ value: 'PKR', label: 'PKR — Pakistani Rupee' }, { value: 'USD', label: 'USD — US Dollar' }, { value: 'AED', label: 'AED — UAE Dirham' }]
 const isElectron = typeof window !== 'undefined' && window.api
@@ -17,6 +17,45 @@ export default function CompanySettings() {
   const [syncing, setSyncing] = useState(false)
   const [syncResult, setSyncResult] = useState(null)
   const [licenseInfo, setLicenseInfo] = useState(null)
+  const [keyModalOpen, setKeyModalOpen] = useState(false)
+  const [newKey, setNewKey] = useState('')
+  const [activatingKey, setActivatingKey] = useState(false)
+  const [keyError, setKeyError] = useState('')
+  const [keySuccess, setKeySuccess] = useState('')
+
+  const handleActivateNewKey = async (e) => {
+    if (e) e.preventDefault()
+    setKeyError('')
+    setKeySuccess('')
+    const clean = newKey.trim().toUpperCase()
+    if (!clean) {
+      setKeyError('Please enter your official License Key.')
+      return
+    }
+    setActivatingKey(true)
+    try {
+      if (!window.api?.license?.activate) {
+        throw new Error('Licensing bridge not available in this environment.')
+      }
+      const res = await window.api.license.activate(clean)
+      if (res?.success) {
+        setKeySuccess(res.message || 'License updated and activated successfully!')
+        const updated = await window.api.license.getStatus()
+        setLicenseInfo(updated)
+        setTimeout(() => {
+          setKeyModalOpen(false)
+          setNewKey('')
+          setKeySuccess('')
+        }, 1800)
+      } else {
+        setKeyError(res?.message || 'Activation failed. Please check the key.')
+      }
+    } catch (err) {
+      setKeyError(err.message || 'Error connecting to license server.')
+    } finally {
+      setActivatingKey(false)
+    }
+  }
 
   useEffect(() => {
     api.settings.getCompanyInfo().then(d => {
@@ -198,11 +237,22 @@ export default function CompanySettings() {
                     {licenseInfo.isActivated ? '● ACTIVATED (100% OFFLINE)' : '○ NOT ACTIVATED'}
                   </span>
                 </div>
-                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 grid grid-cols-2 gap-2 text-[11px] text-slate-600">
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 grid grid-cols-2 gap-2 text-[11px] text-slate-600 mb-3">
                   <div><strong>Store / Registered:</strong> {licenseInfo.license?.storeName || licenseInfo.license?.customerName || 'N/A'}</div>
-                  <div><strong>Counter Plan:</strong> {licenseInfo.license?.plan || 'Standard'}</div>
+                  <div><strong>Counter Plan:</strong> <span className="font-bold text-blue-700">{licenseInfo.license?.plan || 'Standard'}</span></div>
                   <div><strong>License Key:</strong> <code className="font-mono text-blue-700 font-bold">{licenseInfo.license?.key || 'N/A'}</code></div>
                   <div><strong>Hardware ID:</strong> <code className="font-mono font-bold text-slate-800">{licenseInfo.hwid}</code></div>
+                </div>
+                <div className="flex justify-end">
+                  <Btn 
+                    type="button" 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => { setKeyModalOpen(true); setKeyError(''); setKeySuccess(''); }}
+                  >
+                    <span className="material-symbols-outlined text-[16px]">vpn_key</span>
+                    Change / Upgrade License Key
+                  </Btn>
                 </div>
               </div>
             )}
@@ -310,6 +360,59 @@ export default function CompanySettings() {
           </Card>
         </div>
       </div>
+
+      {/* Change / Upgrade License Modal */}
+      {keyModalOpen && (
+        <Modal
+          isOpen={keyModalOpen}
+          onClose={() => setKeyModalOpen(false)}
+          title="Change / Upgrade License Key"
+          maxWidth="max-w-md"
+        >
+          <form onSubmit={handleActivateNewKey} className="space-y-4">
+            <p className="text-[12px] text-slate-600">
+              Upgrading your pharmacy plan or switching license keys? Enter your approved License Key below:
+            </p>
+
+            <Input
+              label="Official License Key *"
+              placeholder="MSPRO-XXXX-XXXX-XXXX-XXXX"
+              value={newKey}
+              onChange={e => setNewKey(e.target.value.toUpperCase())}
+              className="font-mono uppercase tracking-wider"
+              required
+            />
+
+            {keySuccess && (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-800 text-[12px] flex items-center gap-2">
+                <span className="material-symbols-outlined text-[18px] text-emerald-600">check_circle</span>
+                <span>{keySuccess}</span>
+              </div>
+            )}
+
+            {keyError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-800 text-[12px] flex items-center gap-2">
+                <span className="material-symbols-outlined text-[18px] text-rose-600">error</span>
+                <span>{keyError}</span>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
+              <Btn type="button" variant="outline" onClick={() => setKeyModalOpen(false)} disabled={activatingKey}>
+                Cancel
+              </Btn>
+              <Btn type="submit" variant="primary" disabled={activatingKey || !newKey.trim()}>
+                {activatingKey ? (
+                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <span className="material-symbols-outlined text-[16px]">bolt</span>
+                )}
+                Activate & Apply
+              </Btn>
+            </div>
+          </form>
+        </Modal>
+      )}
     </div>
   )
 }

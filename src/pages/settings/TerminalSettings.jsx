@@ -19,6 +19,43 @@ export default function TerminalSettings() {
   const [msg, setMsg] = useState(null)
   const [licenseInfo, setLicenseInfo] = useState(null)
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false)
+  const [upgradeKey, setUpgradeKey] = useState('')
+  const [activatingUpgradeKey, setActivatingUpgradeKey] = useState(false)
+  const [upgradeKeyError, setUpgradeKeyError] = useState('')
+  const [upgradeKeySuccess, setUpgradeKeySuccess] = useState('')
+
+  const handleActivateUpgradeKey = async (e) => {
+    if (e) e.preventDefault()
+    setUpgradeKeyError('')
+    setUpgradeKeySuccess('')
+    const clean = upgradeKey.trim().toUpperCase()
+    if (!clean) {
+      setUpgradeKeyError('Please enter your official Store Pro License Key.')
+      return
+    }
+    setActivatingUpgradeKey(true)
+    try {
+      if (!window.api?.license?.activate) {
+        throw new Error('Licensing bridge not available.')
+      }
+      const res = await window.api.license.activate(clean)
+      if (res?.success) {
+        setUpgradeKeySuccess(res.message || 'Store Pro activated successfully! Multi-counter network is unlocked.')
+        await loadStatus()
+        setTimeout(() => {
+          setUpgradeModalOpen(false)
+          setUpgradeKey('')
+          setUpgradeKeySuccess('')
+        }, 1800)
+      } else {
+        setUpgradeKeyError(res?.message || 'Activation failed.')
+      }
+    } catch (err) {
+      setUpgradeKeyError(err.message || 'Error connecting to license server.')
+    } finally {
+      setActivatingUpgradeKey(false)
+    }
+  }
 
   useEffect(() => {
     loadStatus()
@@ -562,19 +599,61 @@ export default function TerminalSettings() {
             </div>
           </div>
 
+          {/* Quick Activate Upgrade Key Form */}
+          <form onSubmit={handleActivateUpgradeKey} className="p-4 bg-blue-50/60 border border-blue-200 rounded-xl space-y-3">
+            <div className="flex items-center gap-1.5 text-blue-950 font-bold text-[13px]">
+              <span className="material-symbols-outlined text-[18px] text-[#003c90]">key</span>
+              <span>Already Purchased Store Pro? Unlock Instantly:</span>
+            </div>
+            <p className="text-[11px] text-blue-800">
+              Enter your official Store Pro license key below to unlock multi-counter features immediately without reinstalling:
+            </p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="MSPRO-XXXX-XXXX-XXXX-XXXX"
+                value={upgradeKey}
+                onChange={e => setUpgradeKey(e.target.value.toUpperCase())}
+                className="flex-1 px-3 py-2 border border-blue-300 rounded-lg bg-white text-[13px] font-mono tracking-wider uppercase focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <Btn type="submit" variant="primary" disabled={activatingUpgradeKey || !upgradeKey.trim()}>
+                {activatingUpgradeKey ? (
+                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <span className="material-symbols-outlined text-[16px]">bolt</span>
+                )}
+                Unlock Store Pro
+              </Btn>
+            </div>
+
+            {upgradeKeySuccess && (
+              <div className="p-2.5 bg-emerald-100/80 border border-emerald-300 rounded-lg text-emerald-900 text-[11px] font-semibold flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-[16px] text-emerald-700">check_circle</span>
+                <span>{upgradeKeySuccess}</span>
+              </div>
+            )}
+
+            {upgradeKeyError && (
+              <div className="p-2.5 bg-rose-100/80 border border-rose-300 rounded-lg text-rose-900 text-[11px] font-semibold flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-[16px] text-rose-700">error</span>
+                <span>{upgradeKeyError}</span>
+              </div>
+            )}
+          </form>
+
           <div className="flex justify-end gap-2 pt-2 border-t border-[#c3c6d5]">
             <Btn variant="outline" onClick={() => setUpgradeModalOpen(false)}>
               Close
             </Btn>
-            <Btn
-              variant="primary"
-              onClick={() => {
-                alert('Please contact AsianSol support at 0322-8684603 or visit asiansol.com to upgrade your license to Store Pro.')
-              }}
+            <a
+              href="https://pos.asiansol.com"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#003c90] hover:bg-[#002d6b] text-white text-[13px] font-bold rounded-lg transition-all"
             >
-              <span className="material-symbols-outlined text-[16px]">call</span>
-              Contact AsianSol to Upgrade
-            </Btn>
+              <span className="material-symbols-outlined text-[16px]">shopping_cart</span>
+              Buy Store Pro on Website
+            </a>
           </div>
         </div>
       </Modal>

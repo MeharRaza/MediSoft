@@ -84,7 +84,7 @@ export default function Layout() {
   const navigate = useNavigate()
   const [clock, setClock] = useState(new Date().toLocaleTimeString())
   const [storeName, setStoreName] = useState('MediSoft Pharmacy')
-  const [appVersion, setAppVersion] = useState('v1.5.7')
+  const [appVersion, setAppVersion] = useState('v1.5.8')
   const [licensePlan, setLicensePlan] = useState(null)
 
   // Account / Change Credentials Modal State

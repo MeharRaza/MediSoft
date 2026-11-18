@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { checkServerHealth, updateTerminalState } from '../lib/lanClient';
+import { api } from '../lib/api';
+import { Modal, Btn, Input } from '../components/ui';
 
 export default function Activation({ onActivated }) {
   const [hwid, setHwid] = useState('Detecting...');
@@ -8,6 +11,16 @@ export default function Activation({ onActivated }) {
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [copiedHwid, setCopiedHwid] = useState(false);
+
+  // Cashier Terminal LAN Connect modal state
+  const [cashierModalOpen, setCashierModalOpen] = useState(false);
+  const [serverIp, setServerIp] = useState('');
+  const [serverPort, setServerPort] = useState(8088);
+  const [counterName, setCounterName] = useState('Counter 1');
+  const [testingLan, setTestingLan] = useState(false);
+  const [lanStatus, setLanStatus] = useState(null);
+  const [savingLan, setSavingLan] = useState(false);
+
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -160,8 +173,28 @@ export default function Activation({ onActivated }) {
           </button>
         </form>
 
+        {/* Cashier Terminal Quick Connect Option */}
+        <div className="mt-4 pt-4 border-t border-slate-200">
+          <div className="bg-blue-50/70 border border-blue-200 rounded-xl p-3 text-center">
+            <p className="text-[11px] font-bold text-blue-900 mb-0.5">
+              Setting up a 2nd Counter or Cashier Laptop?
+            </p>
+            <p className="text-[10px] text-blue-700 mb-2.5">
+              Cashiers connect directly to your Main Server PC over LAN. No extra license key required.
+            </p>
+            <button
+              type="button"
+              onClick={() => { setCashierModalOpen(true); setLanStatus(null); }}
+              className="w-full py-2 bg-white hover:bg-blue-50 text-[#003c90] border border-[#003c90] font-bold text-[12px] rounded-lg shadow-sm transition-all flex items-center justify-center gap-1.5"
+            >
+              <span className="material-symbols-outlined text-[16px]">point_of_sale</span>
+              <span>Connect as Cashier Terminal</span>
+            </button>
+          </div>
+        </div>
+
         {/* Feature Highlights */}
-        <div className="mt-6 pt-5 border-t border-slate-100 text-left space-y-2 text-[11px] text-slate-500">
+        <div className="mt-5 pt-4 border-t border-slate-100 text-left space-y-2 text-[11px] text-slate-500">
           <div className="flex items-center gap-2">
             <span className="material-symbols-outlined text-[16px] text-emerald-600">offline_bolt</span>
             <span><strong>100% Offline Forever:</strong> Zero internet required after this one-time activation.</span>
@@ -177,7 +210,7 @@ export default function Activation({ onActivated }) {
         </div>
 
         {/* Footer Link */}
-        <div className="mt-5 text-center text-[12px] text-slate-500">
+        <div className="mt-4 text-center text-[12px] text-slate-500">
           Don't have a license key?{' '}
           <a
             href="https://pos.asiansol.com"
@@ -190,7 +223,108 @@ export default function Activation({ onActivated }) {
         </div>
 
       </div>
+
+      {/* Cashier Terminal Modal */}
+      {cashierModalOpen && (
+        <Modal
+          isOpen={cashierModalOpen}
+          onClose={() => setCashierModalOpen(false)}
+          title="Connect Cashier Counter to Server PC"
+          maxWidth="max-w-md"
+        >
+          <div className="space-y-4">
+            <p className="text-[12px] text-slate-600">
+              Enter your pharmacy Main Server PC's Local IP address to link this cashier counter over Wi-Fi / Switch.
+            </p>
+
+            <Input
+              label="Main Server PC IP Address *"
+              placeholder="e.g. 192.168.1.50"
+              value={serverIp}
+              onChange={e => setServerIp(e.target.value)}
+              required
+            />
+
+            <div className="grid grid-cols-2 gap-3">
+              <Input
+                label="Port"
+                type="number"
+                value={serverPort}
+                onChange={e => setServerPort(e.target.value)}
+                required
+              />
+              <Input
+                label="Counter Name"
+                placeholder="Counter 1"
+                value={counterName}
+                onChange={e => setCounterName(e.target.value)}
+              />
+            </div>
+
+            {lanStatus && (
+              <div className={`p-2.5 rounded-lg text-[11px] font-semibold flex items-center gap-1.5 ${
+                lanStatus.online ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'
+              }`}>
+                <span className="material-symbols-outlined text-[16px]">
+                  {lanStatus.online ? 'check_circle' : 'cancel'}
+                </span>
+                <span>
+                  {lanStatus.online ? `Server Online! Ping: ${lanStatus.ping}ms` : `Server Offline: ${lanStatus.error || 'Connection refused'}`}
+                </span>
+              </div>
+            )}
+
+            <div className="flex gap-2 pt-2 border-t border-slate-200">
+              <Btn
+                type="button"
+                variant="outline"
+                className="flex-1"
+                disabled={testingLan || !serverIp.trim()}
+                onClick={async () => {
+                  setTestingLan(true);
+                  setLanStatus(null);
+                  const res = await checkServerHealth(serverIp.trim(), parseInt(serverPort) || 8088);
+                  setTestingLan(false);
+                  setLanStatus(res);
+                }}
+              >
+                {testingLan ? 'Testing...' : 'Test Ping'}
+              </Btn>
+              <Btn
+                type="button"
+                variant="primary"
+                className="flex-1"
+                disabled={savingLan || !serverIp.trim()}
+                onClick={async () => {
+                  setSavingLan(true);
+                  try {
+                    const cfg = {
+                      mode: 'cashier',
+                      serverIp: serverIp.trim(),
+                      serverPort: parseInt(serverPort) || 8088,
+                      counterName: counterName.trim() || 'Counter 1'
+                    };
+                    const res = await api.terminal.saveConfig(cfg);
+                    if (res?.success) {
+                      updateTerminalState(cfg);
+                      if (onActivated) onActivated({ plan: 'Store Pro Cashier' });
+                      navigate('/login', { replace: true });
+                    } else {
+                      alert('Failed to save config: ' + (res?.error || 'Unknown error'));
+                    }
+                  } catch (err) {
+                    alert('Error saving config: ' + err.message);
+                  } finally {
+                    setSavingLan(false);
+                  }
+                }}
+              >
+                {savingLan ? 'Connecting...' : 'Save & Connect'}
+              </Btn>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
-

@@ -687,6 +687,17 @@ CREATE TABLE IF NOT EXISTS leaves (
   status TEXT DEFAULT 'pending', -- pending, approved, rejected
   created_at TEXT DEFAULT (datetime('now', 'localtime'))
 );
+
+CREATE TABLE IF NOT EXISTS activity_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER,
+  username TEXT,
+  role TEXT,
+  action TEXT NOT NULL,
+  details TEXT NOT NULL,
+  counter_name TEXT,
+  created_at TEXT DEFAULT (datetime('now', 'localtime'))
+);
 `)
 
 // ─── SEED DEFAULT DATA ─────────────────────────────────────────────────────
@@ -753,6 +764,31 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_sales_created_at ON sales(created_at);
   CREATE INDEX IF NOT EXISTS idx_sale_items_sale_id ON sale_items(sale_id);
   CREATE INDEX IF NOT EXISTS idx_sale_items_product_id ON sale_items(product_id);
+  CREATE INDEX IF NOT EXISTS idx_activity_logs_created_at ON activity_logs(created_at);
+  CREATE INDEX IF NOT EXISTS idx_activity_logs_action ON activity_logs(action);
+  CREATE INDEX IF NOT EXISTS idx_activity_logs_user_id ON activity_logs(user_id);
 `)
+
+// â”€â”€â”€ AUDIT & ACTIVITY LOGGER HELPER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function logActivity(action, details, meta = {}) {
+  try {
+    const stmt = db.prepare(`
+      INSERT INTO activity_logs (user_id, username, role, action, details, counter_name, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, datetime('now', 'localtime'))
+    `)
+    stmt.run(
+      meta.userId || meta.user_id || null,
+      meta.username || 'Admin',
+      meta.role || 'cashier',
+      action,
+      details,
+      meta.counterName || meta.counter_name || null
+    )
+  } catch (err) {
+    console.warn('[ActivityLog] Could not write log:', err.message)
+  }
+}
+
+db.logActivity = logActivity
 
 module.exports = db

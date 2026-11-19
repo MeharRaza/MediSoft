@@ -119,6 +119,7 @@ contextBridge.exposeInMainWorld('api', {
     getProfitLoss:      (filters) => ipcRenderer.invoke('reports:getProfitLoss', filters),
     getAccountsReport:  (filters) => ipcRenderer.invoke('reports:getAccountsReport', filters),
     getExpiryReport:    (filters) => ipcRenderer.invoke('reports:getExpiryReport', filters),
+    getActivityLogs:    (filters) => ipcRenderer.invoke('reports:getActivityLogs', filters),
   },
   // Expenses
   expenses: {

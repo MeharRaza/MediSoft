@@ -26,7 +26,46 @@ module.exports = (ipcMain) => {
       LEFT JOIN customers c ON c.id=s.customer_id
       WHERE date(s.created_at) BETWEEN ? AND ? AND s.status!='voided'
       ORDER BY s.id DESC LIMIT 100`).all(from, to)
-    return { summary, daily, topProducts, invoices }
+
+    // Cashier-wise breakdown
+    const byCashier = db.prepare(`
+      SELECT COALESCE(s.user_id, 1) as user_id,
+             COALESCE(u.full_name, u.username, 'Administrator') as cashier_name,
+             COALESCE(u.role, 'admin') as role,
+             COUNT(s.id) as total_invoices,
+             COALESCE(SUM(s.grand_total), 0) as total_sales,
+             COALESCE(SUM(s.discount), 0) as total_discount,
+             COALESCE(SUM(CASE WHEN s.payment_method='cash' THEN s.grand_total ELSE 0 END), 0) as cash_collected,
+             COALESCE(SUM(CASE WHEN s.payment_method='credit' THEN s.grand_total ELSE 0 END), 0) as credit_sales
+      FROM sales s
+      LEFT JOIN users u ON u.id = s.user_id
+      WHERE date(s.created_at) BETWEEN ? AND ? AND s.status != 'voided'
+      GROUP BY s.user_id
+      ORDER BY total_sales DESC
+    `).all(from, to)
+
+    return { summary, daily, topProducts, invoices, byCashier }
+  })
+
+  ipcMain.handle('reports:getActivityLogs', (_, filters = {}) => {
+    try {
+      let q = `SELECT * FROM activity_logs WHERE 1=1`
+      const params = []
+      if (filters.from_date) { q += ' AND date(created_at) >= ?'; params.push(filters.from_date) }
+      if (filters.to_date)   { q += ' AND date(created_at) <= ?'; params.push(filters.to_date) }
+      if (filters.user_id)   { q += ' AND user_id = ?'; params.push(filters.user_id) }
+      if (filters.action)    { q += ' AND action = ?'; params.push(filters.action) }
+      if (filters.search) {
+        q += ' AND (details LIKE ? OR username LIKE ? OR action LIKE ?)'
+        params.push(`%${filters.search}%`, `%${filters.search}%`, `%${filters.search}%`)
+      }
+      q += ' ORDER BY id DESC LIMIT ?'
+      params.push(filters.limit || 300)
+      return db.prepare(q).all(...params)
+    } catch (err) {
+      console.warn('[Reports] getActivityLogs error:', err.message)
+      return []
+    }
   })
 
   ipcMain.handle('reports:getPurchaseSummary', (_, filters = {}) => {

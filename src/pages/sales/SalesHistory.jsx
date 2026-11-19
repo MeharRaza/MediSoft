@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { api } from '../../lib/api'
 import { PageHeader, Card, Btn, Input, Select, Badge, Table, Modal, SearchInput, fmt, today } from '../../components/ui'
 import InvoicePrint from '../../components/InvoicePrint'
@@ -30,6 +30,8 @@ export default function SalesHistory() {
   const searchInputRef = useRef()
   const searchDropdownRef = useRef()
   const [status, setStatus]     = useState('')
+  const [selectedCashier, setSelectedCashier] = useState('')
+  const [users, setUsers]       = useState([])
   const [fromDate, setFromDate] = useState(todayDate()) // Changed: Default to today
   const [toDate, setToDate]     = useState(todayDate()) // Changed: Default to today
   const [viewInvoice, setViewInvoice] = useState(null)
@@ -50,7 +52,13 @@ export default function SalesHistory() {
   const fetchInvoices = async () => {
     setLoading(true)
     try {
-      const data = await api.sales.getInvoices({ from_date: fromDate, to_date: toDate, status: status || undefined, search: search || undefined })
+      const data = await api.sales.getInvoices({
+        from_date: fromDate,
+        to_date: toDate,
+        status: status || undefined,
+        search: search || undefined,
+        user_id: selectedCashier || undefined
+      })
       setInvoices(Array.isArray(data) ? data : [])
       
       // Also fetch returns for the same period
@@ -61,6 +69,22 @@ export default function SalesHistory() {
       console.error('❌ Error loading invoices:', e)
     } finally { setLoading(false) }
   }
+
+  // Cashier Stats breakdown for quick shift totals
+  const cashierStats = useMemo(() => {
+    const map = {}
+    invoices.forEach(inv => {
+      const cName = inv.cashier_name || 'Administrator'
+      if (!map[cName]) map[cName] = { name: cName, count: 0, total: 0 }
+      map[cName].count += 1
+      map[cName].total += (inv.grand_total || 0)
+    })
+    return Object.values(map)
+  }, [invoices])
+
+  useEffect(() => {
+    api.settings.getUsers().then(u => setUsers(Array.isArray(u) ? u : [])).catch(() => {})
+  }, [])
 
   useEffect(() => { fetchInvoices() }, [])
   useEffect(() => {
@@ -333,10 +357,27 @@ export default function SalesHistory() {
             </div>
             <Input label="From Date" type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} className="w-40" />
             <Input label="To Date"   type="date" value={toDate}   onChange={e => setToDate(e.target.value)}   className="w-40" />
+            <Select label="Cashier / User" value={selectedCashier} onChange={e => setSelectedCashier(e.target.value)} className="w-44"
+              options={[{value:'',label:'All Cashiers'}, ...users.map(u => ({ value: String(u.id), label: `${u.full_name || u.username} (${u.role})` }))]} />
             <Select label="Status" value={status} onChange={e => setStatus(e.target.value)} className="w-36"
               options={[{value:'',label:'All Status'},{value:'paid',label:'Paid'},{value:'credit',label:'Credit'},{value:'voided',label:'Voided'}]} />
             <Btn variant="primary" onClick={fetchInvoices} className="mt-auto"><span className="material-symbols-outlined text-[16px]">filter_list</span>Apply</Btn>
           </div>
+          {cashierStats.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-[#eceef0] flex flex-wrap items-center gap-2">
+              <span className="text-[11px] font-bold text-[#737784] uppercase tracking-wider flex items-center gap-1">
+                <span className="material-symbols-outlined text-[14px] text-[#003c90]">badge</span>
+                Cashier Shift Totals:
+              </span>
+              {cashierStats.map((c, i) => (
+                <div key={i} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#eaf0ff] border border-[#d2e0ff] text-[11px]">
+                  <span className="font-bold text-[#003c90]">{c.name}:</span>
+                  <span className="font-mono font-bold text-[#191c1e]">PKR {fmt(c.total)}</span>
+                  <span className="text-[#737784] font-medium">({c.count} bills)</span>
+                </div>
+              ))}
+            </div>
+          )}
         </Card>
         <Card>{loading ? <div className="flex items-center justify-center py-16"><div className="w-8 h-8 border-4 border-[#003c90]/20 border-t-[#003c90] rounded-full animate-spin" /></div> : <Table columns={columns} data={invoices} emptyMsg="No invoices found" />}</Card>
       </div>

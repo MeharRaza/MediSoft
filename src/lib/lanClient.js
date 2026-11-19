@@ -193,6 +193,17 @@ export function connectEventStream() {
         });
       } catch (e) {}
     });
+    sseConnection.addEventListener('settings:updated', (event) => {
+      try {
+        localStorage.removeItem('invoice_settings_cache');
+        localStorage.removeItem('medisoft_invoice_settings');
+        window.dispatchEvent(new CustomEvent('company-updated'));
+        window.dispatchEvent(new CustomEvent('invoice-settings-updated'));
+        eventListeners.forEach(listener => {
+          try { listener({ type: 'settings:updated' }); } catch (e) {}
+        });
+      } catch (e) {}
+    });
     sseConnection.onerror = () => {
       // EventSource auto-reconnects in modern browsers
     };

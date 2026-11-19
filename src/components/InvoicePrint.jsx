@@ -135,6 +135,29 @@ export default function InvoicePrint({ invoice, onClose, autoPrint = false, sett
     })
   }, [propSettings])
 
+  // Live listen for settings update from Server PC across LAN
+  useEffect(() => {
+    const handleSettingsUpdate = () => {
+      api.settings.getInvoiceSettings().then(s => {
+        if (s) {
+          setSettings(prev => ({
+            ...prev,
+            ...s,
+            store_name: s.store_name || prev.store_name,
+            address: s.address || prev.address,
+            phone: s.phone || prev.phone
+          }))
+        }
+      })
+    }
+    window.addEventListener('invoice-settings-updated', handleSettingsUpdate)
+    window.addEventListener('company-updated', handleSettingsUpdate)
+    return () => {
+      window.removeEventListener('invoice-settings-updated', handleSettingsUpdate)
+      window.removeEventListener('company-updated', handleSettingsUpdate)
+    }
+  }, [])
+
   // Auto-print on mount if autoPrint is true (for Ctrl+P)
   useEffect(() => {
     if (autoPrint && readyToPrint && !hasAutoPrinted.current) {

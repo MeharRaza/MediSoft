@@ -119,12 +119,13 @@ export const api = {
     updateLeave:     (data) => call('hrm:updateLeave', () => Promise.resolve({ success: true }), data),
   },
   reports: {
-    getSalesSummary:    (f) => call('reports:getSalesSummary', () => Promise.resolve({ summary: {}, daily: [], topProducts: [], invoices: [] }), f),
+    getSalesSummary:    (f) => call('reports:getSalesSummary', () => Promise.resolve({ summary: {}, daily: [], topProducts: [], invoices: [], byCashier: [] }), f),
     getPurchaseSummary: (f) => call('reports:getPurchaseSummary', () => Promise.resolve({ summary: {}, bySupplier: [], invoices: [] }), f),
     getStockReport:     (f) => call('reports:getStockReport', () => Promise.resolve({ products: mockData.products, totalValue: 0 }), f),
     getProfitLoss:      (f) => call('reports:getProfitLoss', () => Promise.resolve({ revenue: 0, cogs: 0, grossProfit: 0, expenses: [], totalExpenses: 0, netProfit: 0 }), f),
     getAccountsReport:  (f) => call('reports:getAccountsReport', () => Promise.resolve({ accounts: [], ledger: [] }), f),
     getExpiryReport:    (f) => call('reports:getExpiryReport', () => Promise.resolve({ expired: [], expiring30: [], expiring90: [] }), f),
+    getActivityLogs:    (f) => call('reports:getActivityLogs', () => Promise.resolve([]), f),
   },
   expenses: {
     getExpenses:      (f) => call('expenses:getExpenses', () => Promise.resolve([]), f),

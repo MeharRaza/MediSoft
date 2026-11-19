@@ -201,7 +201,15 @@ module.exports = (ipcMain) => {
       console.log('✅ Sale transaction completed successfully')
       return { id: saleId, invoice_no: invNo }
     })
-    return create()
+    const res = create()
+    if (db.logActivity) {
+      db.logActivity('SALE_CREATED', `Invoice #${res.invoice_no} created for PKR ${data.grand_total || 0} (${data.items?.length || 0} items) - Customer: ${data.customer_name || 'Walk-in'}`, {
+        userId: data.user_id,
+        username: data.cashier_name || data.created_by || 'Cashier',
+        counterName: data.counter_name
+      })
+    }
+    return res
   })
 
   ipcMain.handle('sales:getInvoices', (_, filters = {}) => {
@@ -217,6 +225,7 @@ module.exports = (ipcMain) => {
     if (filters.to_date)   { q += ' AND date(s.created_at)<=?'; params.push(filters.to_date) }
     if (filters.status)    { q += ' AND s.status=?'; params.push(filters.status) }
     if (filters.customer_id) { q += ' AND s.customer_id=?'; params.push(filters.customer_id) }
+    if (filters.user_id)   { q += ' AND s.user_id=?'; params.push(filters.user_id) }
     
     // Enhanced search: Invoice#, Customer name, OR Product name
     if (filters.search) { 
@@ -448,7 +457,14 @@ module.exports = (ipcMain) => {
       console.log('✅ Sales return completed successfully')
       return { id: returnId, total: data.total, returnedProfit: totalReturnedProfit }
     })
-    return ret()
+    const retRes = ret()
+    if (db.logActivity) {
+      db.logActivity('SALE_RETURNED', `Sale return recorded for PKR ${data.total || 0} (${data.items?.length || 0} items) - Return #${retRes.id}`, {
+        userId: data.user_id,
+        username: data.cashier_name || 'Cashier'
+      })
+    }
+    return retRes
   })
 
   ipcMain.handle('sales:getReturns', (_, filters = {}) => {

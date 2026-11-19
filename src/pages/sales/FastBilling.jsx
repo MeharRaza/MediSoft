@@ -137,10 +137,22 @@ export default function FastBilling() {
 
   useEffect(() => {
     // Load invoice settings for instant receipt printing match
-    api.settings.getInvoiceSettings().then(s => {
-      if (s) setInvoiceSettings(s)
-    }).catch(() => {})
+    const loadSettings = () => {
+      api.settings.getInvoiceSettings().then(s => {
+        if (s) setInvoiceSettings(s)
+      }).catch(() => {})
+    }
+    loadSettings()
 
+    window.addEventListener('invoice-settings-updated', loadSettings)
+    window.addEventListener('company-updated', loadSettings)
+    return () => {
+      window.removeEventListener('invoice-settings-updated', loadSettings)
+      window.removeEventListener('company-updated', loadSettings)
+    }
+  }, [])
+
+  useEffect(() => {
     // Load customers - with optional walk-in names if API exists
     const loadCustomers = async () => {
       try {

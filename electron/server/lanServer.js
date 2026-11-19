@@ -351,6 +351,8 @@ function startLanServer({ port = 8088, storeName = 'MediSoft Pharmacy', ipcHandl
         // Attach user session to sale invoice creation
         if (session && channel === 'sales:createInvoice' && args[0]) {
           args[0].user_id = session.userId || args[0].user_id || 1;
+          args[0].cashier_name = session.fullName || session.username || 'Cashier';
+          args[0].counter_name = session.counterName || 'Cashier Counter';
         }
 
         // Execute IPC handler on server
@@ -362,6 +364,8 @@ function startLanServer({ port = 8088, storeName = 'MediSoft Pharmacy', ipcHandl
           broadcast('sale:created', { invoice_no: result?.invoice_no, cashier: session?.username });
         } else if (channel === 'purchase:createPurchase' || channel === 'inventory:adjustStock') {
           broadcast('stock:updated', { channel });
+        } else if (channel.startsWith('settings:save')) {
+          broadcast('settings:updated', { channel });
         }
 
         res.writeHead(200, { 'Content-Type': 'application/json' });

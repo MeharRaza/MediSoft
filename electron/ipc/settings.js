@@ -125,6 +125,23 @@ module.exports = (ipcMain) => {
     db.prepare(`UPDATE company SET name=?,address=?,phone=?,email=?,ntn=?,currency=?,tax_rate=?,updated_at=datetime('now') WHERE id=1`)
       .run(data.name, data.address||null, data.phone||null, data.email||null,
            data.ntn||null, data.currency||'PKR', data.tax_rate||0)
+
+    // Synchronize company info into invoice_settings table
+    try {
+      db.prepare(`
+        UPDATE invoice_settings 
+        SET store_name = ?, 
+            address = COALESCE(?, address), 
+            phone = COALESCE(?, phone), 
+            updated_at = datetime('now', 'localtime') 
+        WHERE id = 1
+      `).run(data.name, data.address || null, data.phone || null)
+    } catch (e) {}
+
+    if (db.logActivity) {
+      db.logActivity('SETTINGS_UPDATED', `Company settings updated: "${data.name}" (Phone: ${data.phone || 'N/A'})`, { role: 'admin' })
+    }
+
     return { success: true }
   })
 
@@ -324,6 +341,10 @@ module.exports = (ipcMain) => {
       if (data.store_name) {
         db.prepare(`UPDATE company SET name=?, address=?, phone=?, updated_at=datetime('now') WHERE id=1`)
           .run(data.store_name, data.address || '', data.phone || '')
+      }
+
+      if (db.logActivity) {
+        db.logActivity('SETTINGS_UPDATED', `Invoice settings updated: "${data.store_name}" (Paper width: ${data.paper_width || '80mm'})`, { role: 'admin' })
       }
 
       return { success: true }

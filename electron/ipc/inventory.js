@@ -470,15 +470,24 @@ module.exports = (ipcMain) => {
   })
 
   ipcMain.handle('inventory:adjustStock', (_, data) => {
+    let prodName = ''
     const adj = db.transaction(() => {
       const batch = db.prepare('SELECT * FROM batches WHERE id=?').get(data.batch_id)
       if (!batch) throw new Error('Batch not found')
+      const prod = db.prepare('SELECT name FROM products WHERE id=?').get(data.product_id)
+      prodName = prod?.name || `Product #${data.product_id}`
       const newQty = data.type === 'add' ? batch.qty + data.qty : batch.qty - data.qty
       db.prepare('UPDATE batches SET qty=? WHERE id=?').run(newQty, data.batch_id)
       db.prepare(`INSERT INTO stock_adjustments (product_id,batch_id,type,qty,reason,user_id) VALUES (?,?,?,?,?,?)`)
         .run(data.product_id, data.batch_id, data.type, data.qty, data.reason||'', data.user_id||1)
     })
     adj()
+    if (db.logActivity) {
+      db.logActivity('STOCK_ADJUSTED', `Stock ${data.type === 'add' ? 'added' : 'subtracted'} (${data.qty}) for "${prodName}". Reason: ${data.reason || 'Manual adjustment'}`, {
+        userId: data.user_id,
+        role: 'admin'
+      })
+    }
     return { success: true }
   })
 

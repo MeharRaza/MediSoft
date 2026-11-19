@@ -201,6 +201,8 @@ export default function Layout() {
     }).filter(Boolean)
   }, [user])
 
+  const canAccessLogs = user?.role === 'admin' || Boolean(user?.rights?.all) || Boolean(user?.rights?.['logs.access']) || Boolean(user?.rights?.['logs.view_own']) || Boolean(user?.rights?.['logs.view_all'])
+
   // Build flat menu list for keyboard navigation
   const flatMenuItems = [
     { label: 'Dashboard', path: '/dashboard', type: 'link' },
@@ -215,7 +217,8 @@ export default function Layout() {
         })))
       }
       return items
-    })
+    }),
+    ...(canAccessLogs ? [{ label: 'Activity Logs', path: '/logs', type: 'link' }] : [])
   ]
 
   // Keyboard navigation for sidebar
@@ -367,6 +370,13 @@ export default function Layout() {
       }
       
       // Check if we should open a main menu
+      if (key === 'l' && canAccessLogs) {
+        e.preventDefault()
+        navigate('/logs')
+        setSidebarFocused(false)
+        return
+      }
+
       const mainMenuMap = {
         's': 'Sales',
         'p': 'Purchase',
@@ -544,6 +554,25 @@ export default function Layout() {
               </div>
             )
           })}
+
+          {/* Dedicated Activity Logs Section below Settings */}
+          {canAccessLogs && (
+            <div className="pt-1 mt-1 border-t border-[#c3c6d5]/60">
+              <NavLink
+                to="/logs"
+                className={({ isActive }) =>
+                  `flex items-center gap-2 px-4 py-2 text-[12px] font-semibold transition-all ${
+                    isActive
+                      ? 'text-[#003c90] font-bold bg-blue-50 border-r-2 border-[#003c90]'
+                      : 'text-[#434653] hover:bg-[#f2f4f6]'
+                  }`
+                }
+              >
+                <span className="material-symbols-outlined text-[18px]">manage_history</span>
+                Activity Logs
+              </NavLink>
+            </div>
+          )}
         </nav>
 
         {/* User info + credentials + logout */}

@@ -5,6 +5,17 @@ const path = require('path')
 
 let currentUser = null
 
+function getActiveLicense() {
+  try {
+    const licPath = path.join(app.getPath('userData'), 'medisoft_license.dat')
+    if (fs.existsSync(licPath)) {
+      const rec = JSON.parse(fs.readFileSync(licPath, 'utf8'))
+      return typeof rec.token === 'string' ? JSON.parse(rec.token) : rec.token
+    }
+  } catch (e) {}
+  return null
+}
+
 module.exports = (ipcMain) => {
 
   ipcMain.handle('settings:login', (_, data) => {
@@ -30,10 +41,58 @@ module.exports = (ipcMain) => {
   )
 
   ipcMain.handle('settings:createUser', (_, data) => {
-    const r = db.prepare(`INSERT INTO users (username,password,full_name,role,branch_id,rights) VALUES (?,?,?,?,?,?)`)
-      .run(data.username, data.password, data.full_name, data.role||'cashier',
-           data.branch_id||1, JSON.stringify(data.rights||{}))
-    return { id: r.lastInsertRowid, success: true }
+    try {
+      if (!data.username || !data.username.trim()) {
+        return { success: false, message: 'Username is required.' }
+      }
+      if (!data.password || !data.password.trim()) {
+        return { success: false, message: 'Password is required for new users.' }
+      }
+
+      const role = (data.role || 'cashier').toLowerCase()
+
+      // Enforce Plan Limits for Cashier Creation
+      if (role === 'cashier') {
+        const lic = getActiveLicense()
+        const plan = (lic?.plan || 'basic').toLowerCase()
+        const isBasic = plan.includes('basic') || plan.includes('starter') || plan.includes('single')
+        if (isBasic) {
+          return {
+            success: false,
+            message: 'Your current plan (Basic / Starter) does not allow creating cashier users. Please upgrade to Store Pro.'
+          }
+        }
+
+        const countRow = db.prepare("SELECT COUNT(*) as count FROM users WHERE LOWER(role) = 'cashier' AND is_active = 1").get()
+        const activeCashiers = countRow ? countRow.count : 0
+        const maxCashiers = plan.includes('enterprise') ? 9 : 2
+
+        if (activeCashiers >= maxCashiers) {
+          return {
+            success: false,
+            message: `Plan Limit Reached: Store Pro permits a maximum of ${maxCashiers} Cashier accounts (${activeCashiers} currently active). Upgrade to Enterprise to add more counters.`
+          }
+        }
+      }
+
+      // Check for duplicate username
+      const existing = db.prepare('SELECT id FROM users WHERE LOWER(username) = LOWER(?)').get(data.username.trim())
+      if (existing) {
+        return { success: false, message: `Username "${data.username.trim()}" is already taken. Please choose another.` }
+      }
+
+      const r = db.prepare(`INSERT INTO users (username,password,full_name,role,branch_id,rights) VALUES (?,?,?,?,?,?)`)
+        .run(data.username.trim(), data.password, data.full_name || data.username.trim(), data.role || 'cashier',
+             data.branch_id || 1, JSON.stringify(data.rights || {}))
+
+      if (db.logActivity) {
+        db.logActivity('USER_CREATED', `New user "${data.username.trim()}" (${data.role || 'cashier'}) created by admin`, { role: 'admin' })
+      }
+
+      return { id: r.lastInsertRowid, success: true }
+    } catch (err) {
+      return { success: false, message: err.message }
+    }
   })
 
   ipcMain.handle('settings:changeCredentials', (_, data) => {
@@ -84,16 +143,50 @@ module.exports = (ipcMain) => {
   })
 
   ipcMain.handle('settings:updateUser', (_, data) => {
-    if (data.password) {
-      db.prepare(`UPDATE users SET username=?,password=?,full_name=?,role=?,branch_id=?,rights=?,is_active=? WHERE id=?`)
-        .run(data.username, data.password, data.full_name, data.role||'cashier',
-             data.branch_id||1, JSON.stringify(data.rights||{}), data.is_active??1, data.id)
-    } else {
-      db.prepare(`UPDATE users SET username=?,full_name=?,role=?,branch_id=?,rights=?,is_active=? WHERE id=?`)
-        .run(data.username, data.full_name, data.role||'cashier',
-             data.branch_id||1, JSON.stringify(data.rights||{}), data.is_active??1, data.id)
+    try {
+      const existingUser = db.prepare('SELECT * FROM users WHERE id=?').get(data.id)
+      if (!existingUser) return { success: false, message: 'User not found.' }
+
+      const role = (data.role || 'cashier').toLowerCase()
+      // If promoting or changing role to cashier, check plan limit
+      if (role === 'cashier' && existingUser.role.toLowerCase() !== 'cashier') {
+        const lic = getActiveLicense()
+        const plan = (lic?.plan || 'basic').toLowerCase()
+        const isBasic = plan.includes('basic') || plan.includes('starter') || plan.includes('single')
+        if (isBasic) {
+          return { success: false, message: 'Your current plan does not allow cashier roles. Upgrade to Store Pro.' }
+        }
+        const countRow = db.prepare("SELECT COUNT(*) as count FROM users WHERE LOWER(role) = 'cashier' AND is_active = 1").get()
+        const activeCashiers = countRow ? countRow.count : 0
+        const maxCashiers = plan.includes('enterprise') ? 9 : 2
+        if (activeCashiers >= maxCashiers) {
+          return { success: false, message: `Plan Limit Reached: Store Pro permits a maximum of ${maxCashiers} Cashier accounts.` }
+        }
+      }
+
+      if (data.username && data.username.trim() !== existingUser.username) {
+        const dup = db.prepare('SELECT id FROM users WHERE LOWER(username) = LOWER(?) AND id != ?').get(data.username.trim(), data.id)
+        if (dup) return { success: false, message: `Username "${data.username.trim()}" is already taken.` }
+      }
+
+      if (data.password) {
+        db.prepare(`UPDATE users SET username=?,password=?,full_name=?,role=?,branch_id=?,rights=?,is_active=? WHERE id=?`)
+          .run(data.username.trim(), data.password, data.full_name, data.role||'cashier',
+               data.branch_id||1, JSON.stringify(data.rights||{}), data.is_active??1, data.id)
+      } else {
+        db.prepare(`UPDATE users SET username=?,full_name=?,role=?,branch_id=?,rights=?,is_active=? WHERE id=?`)
+          .run(data.username.trim(), data.full_name, data.role||'cashier',
+               data.branch_id||1, JSON.stringify(data.rights||{}), data.is_active??1, data.id)
+      }
+
+      if (db.logActivity) {
+        db.logActivity('USER_UPDATED', `User "${data.username.trim()}" updated`, { role: 'admin' })
+      }
+
+      return { success: true }
+    } catch (err) {
+      return { success: false, message: err.message }
     }
-    return { success: true }
   })
 
   ipcMain.handle('settings:deleteUser', (_, id) => {

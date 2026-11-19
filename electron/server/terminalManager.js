@@ -98,6 +98,7 @@ function registerTerminalIPC(ipcMain, app, ipcHandlersMap = {}) {
   ipcMain.handle('terminal:getStatus', () => {
     const config = loadConfig(app);
     const localIp = lanServer.getLocalIpAddress();
+    const networkInterfaces = lanServer.getAllNetworkInterfaces();
     const lic = getActiveLicense(app);
     const serverKey = lic?.key || null;
     return {
@@ -105,6 +106,7 @@ function registerTerminalIPC(ipcMain, app, ipcHandlersMap = {}) {
       serverIp: config.serverIp,
       serverPort: config.serverPort,
       localIp,
+      networkInterfaces,
       counterName: config.counterName,
       licenseKey: config.licenseKey || '',
       serverLicenseKey: serverKey,
@@ -155,6 +157,11 @@ function registerTerminalIPC(ipcMain, app, ipcHandlersMap = {}) {
   // 3. Get Machine Local IP
   ipcMain.handle('terminal:getLocalIp', () => {
     return lanServer.getLocalIpAddress();
+  });
+
+  // 3b. Get All Active Network Interfaces (Wi-Fi + Ethernet)
+  ipcMain.handle('terminal:getNetworkInterfaces', () => {
+    return lanServer.getAllNetworkInterfaces();
   });
 
   // 4. Get Connected Cashier Terminals

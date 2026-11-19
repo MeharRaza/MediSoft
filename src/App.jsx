@@ -39,6 +39,7 @@ import InvoiceSettings from './pages/settings/InvoiceSettings'
 import UserManagement from './pages/settings/UserManagement'
 import BranchManagement from './pages/settings/BranchManagement'
 import TerminalSettings from './pages/settings/TerminalSettings'
+import Logs from './pages/Logs'
 
 // ─── HARDWARE LICENSE GUARD & SUBSCRIPTION LOCK ──────────────
 function LicenseGuard({ children }) {
@@ -236,6 +237,8 @@ export default function App() {
           <Route path="settings/users"    element={<UserManagement />} />
           <Route path="settings/branches" element={<BranchManagement />} />
           <Route path="settings/terminals" element={<TerminalSettings />} />
+          {/* Activity Logs */}
+          <Route path="logs" element={<Logs />} />
         </Route>
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>

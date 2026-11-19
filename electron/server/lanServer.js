@@ -13,16 +13,37 @@ let maxCashiersAllowed = 2; // Plan 2 / Store Pro limit: Max 2 Cashier Terminals
 /**
  * Returns the primary local IPv4 address of this machine on the local network.
  */
-function getLocalIpAddress() {
+function getAllNetworkInterfaces() {
   const interfaces = os.networkInterfaces();
+  const results = [];
   for (const name of Object.keys(interfaces)) {
+    const isVirtual = /virtual|vmware|vbox|vethernet|hyper-v|loopback/i.test(name);
     for (const iface of interfaces[name]) {
       if (iface.family === 'IPv4' && !iface.internal) {
-        return iface.address;
+        if (iface.address.startsWith('169.254.') || iface.address.startsWith('192.168.56.')) continue;
+        const isWifi = /wi-?fi|wlan/i.test(name);
+        const isEthernet = /ethernet|local area/i.test(name) && !isVirtual;
+        results.push({
+          name,
+          address: iface.address,
+          type: isWifi ? 'Wi-Fi' : isEthernet ? 'Ethernet LAN' : (isVirtual ? 'Virtual' : 'Network'),
+          isVirtual,
+          isWifi
+        });
       }
     }
   }
-  return '127.0.0.1';
+  results.sort((a, b) => {
+    if (a.isVirtual !== b.isVirtual) return a.isVirtual ? 1 : -1;
+    if (a.isWifi !== b.isWifi) return a.isWifi ? -1 : 1;
+    return 0;
+  });
+  return results;
+}
+
+function getLocalIpAddress() {
+  const all = getAllNetworkInterfaces();
+  return all[0] ? all[0].address : '127.0.0.1';
 }
 
 /**
@@ -190,6 +211,7 @@ function startLanServer({ port = 8088, storeName = 'MediSoft Pharmacy', ipcHandl
         status: 'ok',
         serverName: os.hostname(),
         ip: getLocalIpAddress(),
+        interfaces: getAllNetworkInterfaces(),
         port,
         storeName,
         serverTime: new Date().toISOString(),
@@ -329,7 +351,19 @@ function startLanServer({ port = 8088, storeName = 'MediSoft Pharmacy', ipcHandl
             res.end(JSON.stringify({ success: false, message: 'Access denied: Purchase operations locked.' }));
             return;
           }
-          if (channel.startsWith('reports:') && !userRights['reports.financial']) {
+          if (channel === 'reports:getActivityLogs') {
+            const hasLogAccess = Boolean(userRights['logs.access'] || userRights['logs.view_own'] || userRights['logs.view_all'] || userRights['reports.financial']);
+            if (!hasLogAccess) {
+              res.writeHead(403, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ success: false, message: 'Access denied: Activity logs locked.' }));
+              return;
+            }
+            // If user only has logs.view_own and NOT logs.view_all, enforce own username filter
+            if (!userRights['logs.view_all']) {
+              args[0] = args[0] || {};
+              args[0].username = session.username;
+            }
+          } else if (channel.startsWith('reports:') && !userRights['reports.financial']) {
             res.writeHead(403, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ success: false, message: 'Access denied: Reports locked.' }));
             return;
@@ -432,6 +466,7 @@ module.exports = {
   stopLanServer,
   broadcast,
   getLocalIpAddress,
+  getAllNetworkInterfaces,
   getPairedTerminals,
   unpairTerminal,
   setMaxCashiers

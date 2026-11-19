@@ -56,6 +56,24 @@ const PERMISSION_DEFINITIONS = [
     label: 'System Settings & Terminals',
     desc: 'Configure printers, store info, users and LAN terminals',
     category: 'Settings'
+  },
+  {
+    key: 'logs.access',
+    label: 'Activity Logs Menu Access',
+    desc: 'Allow cashier to access the Activity Logs section',
+    category: 'Audit & Logs'
+  },
+  {
+    key: 'logs.view_own',
+    label: 'View Own Terminal Logs Only',
+    desc: 'Restrict user to only view their own activity and sales history',
+    category: 'Audit & Logs'
+  },
+  {
+    key: 'logs.view_all',
+    label: 'View All Users & Counters Logs',
+    desc: 'Allow viewing complete audit trail for all cashiers and admin',
+    category: 'Audit & Logs'
   }
 ]
 
@@ -67,7 +85,10 @@ const DEFAULT_CASHIER_RIGHTS = {
   'inventory.view_profit': false,
   'inventory.purchases': false,
   'reports.financial': false,
-  'settings.access': false
+  'settings.access': false,
+  'logs.access': true,
+  'logs.view_own': true,
+  'logs.view_all': false
 }
 
 const DEFAULT_ADMIN_RIGHTS = {
@@ -79,7 +100,10 @@ const DEFAULT_ADMIN_RIGHTS = {
   'inventory.view_profit': true,
   'inventory.purchases': true,
   'reports.financial': true,
-  'settings.access': true
+  'settings.access': true,
+  'logs.access': true,
+  'logs.view_own': true,
+  'logs.view_all': true
 }
 
 const emptyForm = () => ({
@@ -102,11 +126,24 @@ export default function UserManagement() {
   const [form, setForm] = useState(emptyForm())
   const [submitting, setSubmitting] = useState(false)
   const [msg, setMsg] = useState(null)
+  const [licenseInfo, setLicenseInfo] = useState(null)
 
   useEffect(() => {
     fetchUsers()
     api.settings.getBranches().then(b => setBranches(Array.isArray(b) ? b : []))
+    if (window.api?.license?.getStatus) {
+      window.api.license.getStatus().then(lic => {
+        setLicenseInfo(lic?.license || null)
+      }).catch(() => {})
+    }
   }, [])
+
+  const planName = licenseInfo?.plan || 'Store Pro'
+  const isBasic = planName.toLowerCase().includes('basic') || planName.toLowerCase().includes('starter') || planName.toLowerCase().includes('single')
+  const isEnterprise = planName.toLowerCase().includes('enterprise')
+  const maxCashiers = isBasic ? 0 : (isEnterprise ? 9 : 2)
+  const activeCashiers = users.filter(u => u.role === 'cashier' && u.is_active !== 0).length
+  const isCashierLimitReached = !isBasic && activeCashiers >= maxCashiers
 
   const fetchUsers = () => {
     setLoading(true)
@@ -178,13 +215,20 @@ export default function UserManagement() {
       return setMsg({ type: 'error', text: 'Password is required for new users.' })
     }
 
+    // Plan 1 (Basic) block
+    if (isBasic && form.role === 'cashier') {
+      return setMsg({
+        type: 'error',
+        text: 'Basic Plan does not support cashier counter accounts. Please upgrade to Store Pro.'
+      })
+    }
+
     // Plan 2 Gating: Max 2 Cashiers
     if (!editingId && form.role === 'cashier') {
-      const activeCashiers = users.filter(u => u.role === 'cashier').length
-      if (activeCashiers >= 2) {
+      if (activeCashiers >= maxCashiers) {
         return setMsg({
           type: 'error',
-          text: 'Store Pro limit reached: Maximum 2 Cashier user accounts allowed under Plan 2 (3 counters total). Upgrade to Enterprise to add more counters.'
+          text: `Store Pro limit reached: Maximum ${maxCashiers} Cashier user accounts allowed under Plan 2 (3 counters total). Upgrade to Enterprise to add more counters.`
         })
       }
     }
@@ -205,10 +249,18 @@ export default function UserManagement() {
 
     try {
       if (editingId) {
-        await api.settings.updateUser({ id: editingId, ...payload })
+        const res = await api.settings.updateUser({ id: editingId, ...payload })
+        if (res && res.success === false) {
+          setMsg({ type: 'error', text: res.message || 'Failed to update user.' })
+          return
+        }
         setMsg({ type: 'success', text: `User "${payload.username}" updated successfully.` })
       } else {
-        await api.settings.createUser(payload)
+        const res = await api.settings.createUser(payload)
+        if (res && res.success === false) {
+          setMsg({ type: 'error', text: res.message || 'Failed to create user.' })
+          return
+        }
         setMsg({ type: 'success', text: `User "${payload.username}" created successfully.` })
       }
       setModalOpen(false)
@@ -333,18 +385,43 @@ export default function UserManagement() {
       />
 
       <div className="p-5 space-y-4 flex-1 overflow-auto">
-        {/* Plan 2 Store Pro Limit Banner */}
-        <div className="bg-blue-50/70 border border-blue-200 rounded-xl p-3 flex flex-col md:flex-row md:items-center justify-between gap-2 text-[12px]">
-          <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-[18px] text-[#003c90]">point_of_sale</span>
-            <span className="text-slate-700">
-              <strong>Store Pro Plan 2:</strong> Allows 1 Main Server + up to <strong>2 Cashier Terminals</strong> (3 counters total).
+        {/* Plan & Cashier Limit Banner */}
+        {isBasic ? (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 flex flex-col md:flex-row md:items-center justify-between gap-2 text-[12px]">
+            <div className="flex items-center gap-2.5">
+              <span className="material-symbols-outlined text-[20px] text-amber-700">lock</span>
+              <span className="text-amber-900 leading-relaxed">
+                <strong>Active Plan: Basic (Single PC):</strong> Cashier counter accounts are not available on Basic Plan. Upgrade to <strong>Store Pro (Plan 2)</strong> to unlock 2 Cashier Terminals with real-time sync.
+              </span>
+            </div>
+            <span className="font-bold px-3 py-1 rounded-full bg-amber-100 text-amber-900 text-[11px] shrink-0">
+              0 / 0 Cashiers Allowed
             </span>
           </div>
-          <span className="font-bold px-2.5 py-1 rounded-full bg-blue-100 text-[#003c90] text-[11px] self-start md:self-auto">
-            {users.filter(u => u.role === 'cashier').length} / 2 Cashier Accounts Created
-          </span>
-        </div>
+        ) : (
+          <div className={`border rounded-xl p-3.5 flex flex-col md:flex-row md:items-center justify-between gap-2 text-[12px] ${
+            isCashierLimitReached ? 'bg-amber-50/80 border-amber-300' : 'bg-blue-50/70 border-blue-200'
+          }`}>
+            <div className="flex items-center gap-2.5">
+              <span className={`material-symbols-outlined text-[20px] ${isCashierLimitReached ? 'text-amber-700' : 'text-[#003c90]'}`}>
+                {isCashierLimitReached ? 'report_problem' : 'point_of_sale'}
+              </span>
+              <span className={isCashierLimitReached ? 'text-amber-950 leading-relaxed' : 'text-slate-700 leading-relaxed'}>
+                <strong>{planName} Plan:</strong> Supports 1 Main Server + up to <strong>{maxCashiers} Cashier Terminals</strong> (Total {maxCashiers + 1} counters).
+                {isCashierLimitReached && (
+                  <span className="font-semibold text-amber-800 ml-1">
+                    Maximum counter accounts created. Upgrade to Enterprise to add more.
+                  </span>
+                )}
+              </span>
+            </div>
+            <span className={`font-bold px-3 py-1 rounded-full text-[11px] shrink-0 ${
+              isCashierLimitReached ? 'bg-amber-200 text-amber-950 border border-amber-300' : 'bg-blue-100 text-[#003c90]'
+            }`}>
+              {activeCashiers} / {maxCashiers} Cashier Accounts {isCashierLimitReached ? '(LIMIT REACHED)' : 'Active'}
+            </span>
+          </div>
+        )}
         {msg && (
           <div className={`flex items-center gap-2 px-4 py-3 rounded-lg text-[13px] font-semibold ${
             msg.type === 'error'

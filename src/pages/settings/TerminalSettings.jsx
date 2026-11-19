@@ -28,6 +28,16 @@ export default function TerminalSettings() {
   const [upgradeKeyError, setUpgradeKeyError] = useState('')
   const [upgradeKeySuccess, setUpgradeKeySuccess] = useState('')
   const [pairedTerminals, setPairedTerminals] = useState([])
+  const [networkInterfaces, setNetworkInterfaces] = useState([])
+  const [copiedKey, setCopiedKey] = useState('')
+
+  const copyToClipboard = (text, key) => {
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(text)
+    }
+    setCopiedKey(key)
+    setTimeout(() => setCopiedKey(''), 2000)
+  }
 
   const handleActivateUpgradeKey = async (e) => {
     if (e) e.preventDefault()
@@ -82,6 +92,14 @@ export default function TerminalSettings() {
           localIp: res.localIp || '127.0.0.1',
           isServerRunning: res.isServerRunning || false
         }))
+        if (Array.isArray(res.networkInterfaces) && res.networkInterfaces.length > 0) {
+          setNetworkInterfaces(res.networkInterfaces)
+        } else if (api.terminal?.getNetworkInterfaces) {
+          const ifaces = await api.terminal.getNetworkInterfaces().catch(() => [])
+          if (Array.isArray(ifaces) && ifaces.length > 0) {
+            setNetworkInterfaces(ifaces)
+          }
+        }
       }
 
       if (res?.isServerRunning && api.terminal?.getPairedTerminals) {
@@ -262,12 +280,25 @@ export default function TerminalSettings() {
         {/* Machine Info Bar */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Card className="p-4 flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center text-[#003c90]">
+            <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center text-[#003c90] shrink-0">
               <span className="material-symbols-outlined text-[24px]">lan</span>
             </div>
-            <div>
+            <div className="min-w-0 flex-1">
               <p className="text-[11px] font-bold text-[#737784] uppercase tracking-wider">This PC's Local IP</p>
-              <p className="text-[16px] font-bold font-mono text-[#191c1e]">{config.localIp}</p>
+              {networkInterfaces.length > 0 ? (
+                <div className="flex flex-col gap-1 mt-0.5">
+                  {networkInterfaces.slice(0, 2).map((n, i) => (
+                    <div key={i} className="flex items-center justify-between text-[12px]">
+                      <span className="font-mono font-bold text-[#191c1e]">{n.address}</span>
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">
+                        {n.type}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[16px] font-bold font-mono text-[#191c1e]">{config.localIp}</p>
+              )}
             </div>
           </Card>
 
@@ -450,30 +481,99 @@ export default function TerminalSettings() {
               Enter this IP address on the other Cashier PCs so they can connect to this Main Counter.
             </p>
 
-            <div className="bg-green-50/60 border border-green-200 rounded-xl p-4 mb-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div>
-                <p className="text-[11px] font-bold text-green-800 uppercase tracking-wider">Share this Server Address with Cashiers</p>
-                <p className="text-[20px] font-bold font-mono text-green-900 mt-0.5">
-                  http://{config.localIp}:{config.serverPort}
-                </p>
-                <p className="text-[11px] text-green-700 mt-1">
-                  Both PCs must be connected to the same Wi-Fi router or Ethernet switch (No Internet Needed).
-                </p>
-                {config.serverLicenseKey && (
-                  <div className="mt-2 pt-2 border-t border-green-200">
-                    <p className="text-[10px] font-bold text-green-800 uppercase tracking-wider">Store Pro Pairing Key (Give to Cashier)</p>
-                    <code className="text-[13px] font-mono font-bold text-green-950 bg-white/80 px-2 py-0.5 rounded border border-green-300 inline-block mt-0.5 select-all">
-                      {config.serverLicenseKey}
-                    </code>
+            <div className="bg-green-50/60 border border-green-200 rounded-xl p-5 mb-5 space-y-4">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-bold text-green-800 uppercase tracking-wider">
+                    Share Server Address with Cashier PCs
+                  </p>
+                  <p className="text-[12px] text-green-700 mt-0.5">
+                    Cashier PCs on Wi-Fi use the Wi-Fi IP; Cashiers connected via LAN Cable use the Ethernet IP.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="px-3 py-1 bg-green-600 text-white text-[11px] font-bold rounded-lg flex items-center gap-1.5 shadow-sm">
+                    <span className="material-symbols-outlined text-[15px]">check_circle</span>
+                    Hub Active (Port {config.serverPort})
+                  </span>
+                </div>
+              </div>
+
+              {/* Multi-Network Interfaces List */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                {networkInterfaces.length > 0 ? (
+                  networkInterfaces.map((iface, idx) => (
+                    <div
+                      key={idx}
+                      className="bg-white/95 border border-green-200 rounded-xl p-3 flex items-center justify-between shadow-xs hover:border-green-300 transition-all"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+                          iface.isWifi ? 'bg-sky-100 text-sky-700' : 'bg-emerald-100 text-emerald-700'
+                        }`}>
+                          <span className="material-symbols-outlined text-[20px]">
+                            {iface.isWifi ? 'wifi' : 'settings_ethernet'}
+                          </span>
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[11px] font-bold text-slate-800">{iface.type}</span>
+                            <span className="text-[10px] text-slate-400">({iface.name})</span>
+                          </div>
+                          <p className="font-mono font-bold text-[14px] text-slate-900 leading-tight">
+                            {iface.address}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(iface.address, `ip_${idx}`)}
+                        className="px-2.5 py-1 text-[11px] font-bold rounded-md border border-slate-200 hover:bg-slate-100 text-slate-700 flex items-center gap-1 transition-all"
+                      >
+                        <span className="material-symbols-outlined text-[14px]">
+                          {copiedKey === `ip_${idx}` ? 'check' : 'content_copy'}
+                        </span>
+                        <span>{copiedKey === `ip_${idx}` ? 'Copied' : 'Copy IP'}</span>
+                      </button>
+                    </div>
+                  ))
+                ) : (
+                  <div className="bg-white/95 border border-green-200 rounded-xl p-3 flex items-center justify-between">
+                    <div>
+                      <p className="text-[11px] font-bold text-slate-500 uppercase">Local IP</p>
+                      <p className="font-mono font-bold text-[14px] text-slate-900">{config.localIp}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(config.localIp, 'local_ip')}
+                      className="px-2.5 py-1 text-[11px] font-bold rounded-md border border-slate-200 hover:bg-slate-100 text-slate-700"
+                    >
+                      {copiedKey === 'local_ip' ? 'Copied' : 'Copy IP'}
+                    </button>
                   </div>
                 )}
               </div>
-              <div className="flex items-center gap-2">
-                <span className="px-3 py-1.5 bg-green-600 text-white text-[12px] font-bold rounded-lg flex items-center gap-1.5 shadow-sm">
-                  <span className="material-symbols-outlined text-[16px]">check_circle</span>
-                  Hub Ready
-                </span>
-              </div>
+
+              {config.serverLicenseKey && (
+                <div className="pt-2 border-t border-green-200/80 flex flex-col md:flex-row md:items-center justify-between gap-2">
+                  <div>
+                    <p className="text-[10px] font-bold text-green-800 uppercase tracking-wider">Store Pro Pairing Key (Give to Cashier)</p>
+                    <code className="text-[13px] font-mono font-bold text-green-950 bg-white/90 px-2 py-0.5 rounded border border-green-300 inline-block mt-0.5 select-all">
+                      {config.serverLicenseKey}
+                    </code>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => copyToClipboard(config.serverLicenseKey, 'lic_key')}
+                    className="self-start md:self-auto px-3 py-1 bg-green-700 hover:bg-green-800 text-white rounded-lg text-[11px] font-bold flex items-center gap-1 shadow-xs"
+                  >
+                    <span className="material-symbols-outlined text-[14px]">
+                      {copiedKey === 'lic_key' ? 'check' : 'content_copy'}
+                    </span>
+                    <span>{copiedKey === 'lic_key' ? 'Key Copied' : 'Copy Key'}</span>
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

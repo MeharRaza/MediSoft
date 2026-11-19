@@ -54,6 +54,14 @@ module.exports = (ipcMain) => {
       if (filters.from_date) { q += ' AND date(created_at) >= ?'; params.push(filters.from_date) }
       if (filters.to_date)   { q += ' AND date(created_at) <= ?'; params.push(filters.to_date) }
       if (filters.user_id)   { q += ' AND user_id = ?'; params.push(filters.user_id) }
+      if (filters.username) {
+        q += ' AND LOWER(username) = LOWER(?)'
+        params.push(filters.username)
+      }
+      if (filters.role) {
+        q += ' AND LOWER(role) = LOWER(?)'
+        params.push(filters.role)
+      }
       if (filters.action)    { q += ' AND action = ?'; params.push(filters.action) }
       if (filters.search) {
         q += ' AND (details LIKE ? OR username LIKE ? OR action LIKE ?)'

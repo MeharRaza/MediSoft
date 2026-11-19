@@ -28,6 +28,7 @@ contextBridge.exposeInMainWorld('api', {
     getStatus:  () => ipcRenderer.invoke('terminal:getStatus'),
     saveConfig: (cfg) => ipcRenderer.invoke('terminal:saveConfig', cfg),
     getLocalIp: () => ipcRenderer.invoke('terminal:getLocalIp'),
+    getNetworkInterfaces: () => ipcRenderer.invoke('terminal:getNetworkInterfaces'),
     getPairedTerminals: () => ipcRenderer.invoke('terminal:getPairedTerminals'),
     unpairTerminal: (id) => ipcRenderer.invoke('terminal:unpairTerminal', id),
   },

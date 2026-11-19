@@ -204,6 +204,7 @@ export const api = {
     getStatus:  () => isElectron && window.api?.terminal ? window.api.terminal.getStatus() : Promise.resolve({ mode: 'standalone', serverIp: '127.0.0.1', serverPort: 8088, localIp: '127.0.0.1', counterName: 'Main Counter', isServerRunning: false }),
     saveConfig: (cfg) => isElectron && window.api?.terminal ? window.api.terminal.saveConfig(cfg) : Promise.resolve({ success: true, config: cfg }),
     getLocalIp: () => isElectron && window.api?.terminal ? window.api.terminal.getLocalIp() : Promise.resolve('127.0.0.1'),
+    getNetworkInterfaces: () => isElectron && window.api?.terminal?.getNetworkInterfaces ? window.api.terminal.getNetworkInterfaces() : Promise.resolve([]),
     getPairedTerminals: () => isElectron && window.api?.terminal?.getPairedTerminals ? window.api.terminal.getPairedTerminals() : Promise.resolve([]),
     unpairTerminal: (id) => isElectron && window.api?.terminal?.unpairTerminal ? window.api.terminal.unpairTerminal(id) : Promise.resolve({ success: true })
   }

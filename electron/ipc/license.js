@@ -132,6 +132,29 @@ module.exports = function registerLicenseIPC(ipcMain, app) {
     const currentHwid = getHardwareId();
 
     if (!fs.existsSync(licenseFilePath)) {
+      // Check if configured as a Paired LAN Cashier Terminal
+      const terminalConfigPath = path.join(app.getPath('userData'), 'terminal_config.json');
+      if (fs.existsSync(terminalConfigPath)) {
+        try {
+          const tcfg = JSON.parse(fs.readFileSync(terminalConfigPath, 'utf8'));
+          if (tcfg.mode === 'cashier' && tcfg.serverIp && tcfg.licenseKey) {
+            cachedLicenseStatus = {
+              isActivated: true,
+              isCashierTerminal: true,
+              hwid: currentHwid,
+              license: {
+                plan: 'Store Pro (Cashier Terminal)',
+                storeName: tcfg.counterName ? `${tcfg.counterName} (LAN)` : 'Cashier Counter',
+                key: tcfg.licenseKey,
+                serverIp: tcfg.serverIp,
+                expiresAt: 'Linked to Server PC'
+              }
+            };
+            return cachedLicenseStatus;
+          }
+        } catch (e) {}
+      }
+
       cachedLicenseStatus = { isActivated: false, hwid: currentHwid };
       return cachedLicenseStatus;
     }
@@ -154,7 +177,12 @@ module.exports = function registerLicenseIPC(ipcMain, app) {
       // 2. Parse token payload
       const payload = typeof token === 'string' ? JSON.parse(token) : token;
 
-      // 3. Verify Hardware ID binding
+      // 3. Check Remote Suspension Status
+      if (payload.status === 'Suspended') {
+        return { isActivated: false, isSuspended: true, hwid: currentHwid, error: 'License suspended by administrator.' };
+      }
+
+      // 4. Verify Hardware ID binding
       if (payload.hwid && payload.hwid !== currentHwid) {
         return {
           isActivated: false,
@@ -163,11 +191,11 @@ module.exports = function registerLicenseIPC(ipcMain, app) {
         };
       }
 
-      // 4. Verify Expiration if present
+      // 5. Verify Expiration if present (Monthly Subscription)
       if (payload.expiresAt) {
         const exp = new Date(payload.expiresAt);
         if (exp < new Date()) {
-          return { isActivated: false, hwid: currentHwid, error: 'This license key has expired.' };
+          return { isActivated: false, isExpired: true, hwid: currentHwid, error: 'This license subscription has expired.' };
         }
       }
 

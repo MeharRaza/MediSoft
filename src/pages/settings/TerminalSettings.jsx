@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { api } from '../../lib/api'
 import { checkServerHealth, updateTerminalState } from '../../lib/lanClient'
 import { PageHeader, Card, Btn, Input, Badge, Modal } from '../../components/ui'
 
 export default function TerminalSettings() {
+  const navigate = useNavigate()
   const [config, setConfig] = useState({
     mode: 'standalone', // 'standalone', 'server', 'cashier'
     serverIp: '127.0.0.1',
@@ -25,6 +27,7 @@ export default function TerminalSettings() {
   const [activatingUpgradeKey, setActivatingUpgradeKey] = useState(false)
   const [upgradeKeyError, setUpgradeKeyError] = useState('')
   const [upgradeKeySuccess, setUpgradeKeySuccess] = useState('')
+  const [pairedTerminals, setPairedTerminals] = useState([])
 
   const handleActivateUpgradeKey = async (e) => {
     if (e) e.preventDefault()
@@ -81,6 +84,11 @@ export default function TerminalSettings() {
         }))
       }
 
+      if (res?.isServerRunning && api.terminal?.getPairedTerminals) {
+        const terms = await api.terminal.getPairedTerminals().catch(() => [])
+        setPairedTerminals(terms || [])
+      }
+
       if (window.api?.license?.getStatus) {
         const lic = await window.api.license.getStatus()
         setLicenseInfo(lic?.license || null)
@@ -89,6 +97,20 @@ export default function TerminalSettings() {
       console.warn('Failed to get terminal status:', err)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleUnpairTerminal = async (id) => {
+    if (!confirm('Are you sure you want to unpair this cashier counter terminal? This will free up a counter slot.')) return
+    try {
+      if (api.terminal?.unpairTerminal) {
+        await api.terminal.unpairTerminal(id)
+        const updated = await api.terminal.getPairedTerminals().catch(() => [])
+        setPairedTerminals(updated || [])
+        setMsg({ type: 'success', text: 'Terminal unpaired successfully. Slot is now free.' })
+      }
+    } catch (err) {
+      setMsg({ type: 'error', text: err.message })
     }
   }
 
@@ -468,6 +490,86 @@ export default function TerminalSettings() {
                 onChange={e => setConfig(c => ({ ...c, counterName: e.target.value }))}
                 placeholder="Main Counter / Server"
               />
+            </div>
+
+            {/* Cashier Permissions Shortcut Card */}
+            <div className="mt-5 pt-4 border-t border-slate-100 flex flex-col md:flex-row items-center justify-between gap-3 bg-blue-50/50 p-4 rounded-xl border border-blue-200">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-100 text-[#003c90] flex items-center justify-center shrink-0">
+                  <span className="material-symbols-outlined text-[24px]">manage_accounts</span>
+                </div>
+                <div>
+                  <h4 className="font-bold text-[13px] text-slate-800">Cashier Terminal Rights & Passwords</h4>
+                  <p className="text-[11px] text-slate-500">
+                    Create cashier credentials, restrict discounts, hide profit % and lock settings for counter terminals.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate('/settings/users')}
+                className="px-4 py-2 bg-[#003c90] hover:bg-[#002d6b] text-white font-bold text-[12px] rounded-lg shadow-sm flex items-center gap-1.5 shrink-0 transition-all"
+              >
+                <span>Manage Cashier Rights</span>
+                <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
+              </button>
+            </div>
+
+            {/* Paired Cashier Terminals Table */}
+            <div className="mt-5 pt-4 border-t border-slate-100">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h4 className="font-bold text-[13px] text-slate-800">Paired Cashier Counters</h4>
+                  <p className="text-[11px] text-slate-500">
+                    Store Pro Plan 2 allows a maximum of <strong>2 Cashier Terminals</strong> (3 counters total).
+                  </p>
+                </div>
+                <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-slate-100 text-slate-700">
+                  {pairedTerminals.length} / 2 Counters Active
+                </span>
+              </div>
+
+              {pairedTerminals.length === 0 ? (
+                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-center text-[12px] text-slate-500">
+                  No cashier terminals currently connected. Follow the Cashier setup on your 2nd PC to pair.
+                </div>
+              ) : (
+                <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white">
+                  <table className="w-full text-left text-[12px]">
+                    <thead className="bg-slate-50 text-slate-500 uppercase text-[10px] tracking-wider border-b border-slate-200">
+                      <tr>
+                        <th className="py-2.5 px-3">Counter Name</th>
+                        <th className="py-2.5 px-3">Local IP</th>
+                        <th className="py-2.5 px-3">Paired At</th>
+                        <th className="py-2.5 px-3">Last Seen</th>
+                        <th className="py-2.5 px-3 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {pairedTerminals.map(t => (
+                        <tr key={t.id} className="hover:bg-slate-50">
+                          <td className="py-2.5 px-3 font-bold text-slate-800 flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                            {t.name}
+                          </td>
+                          <td className="py-2.5 px-3 font-mono text-slate-600">{t.ip}</td>
+                          <td className="py-2.5 px-3 text-slate-500">{new Date(t.pairedAt).toLocaleTimeString()}</td>
+                          <td className="py-2.5 px-3 text-slate-500">{new Date(t.lastSeen).toLocaleTimeString()}</td>
+                          <td className="py-2.5 px-3 text-right">
+                            <button
+                              type="button"
+                              onClick={() => handleUnpairTerminal(t.id)}
+                              className="px-2.5 py-1 bg-rose-50 text-rose-700 hover:bg-rose-100 rounded-lg text-[11px] font-semibold transition-colors"
+                            >
+                              Unpair Slot
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </Card>
         )}

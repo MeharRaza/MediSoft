@@ -23,16 +23,20 @@ function getConfigPath(app) {
   return configFilePath;
 }
 
-function getActiveLicenseKey(app) {
+function getActiveLicense(app) {
   try {
     const licPath = path.join(app.getPath('userData'), 'medisoft_license.dat');
     if (fs.existsSync(licPath)) {
       const rec = JSON.parse(fs.readFileSync(licPath, 'utf8'));
-      const token = typeof rec.token === 'string' ? JSON.parse(rec.token) : rec.token;
-      return token?.key || null;
+      return typeof rec.token === 'string' ? JSON.parse(rec.token) : rec.token;
     }
   } catch (e) {}
   return null;
+}
+
+function getActiveLicenseKey(app) {
+  const lic = getActiveLicense(app);
+  return lic?.key || null;
 }
 
 function loadConfig(app) {
@@ -73,18 +77,29 @@ function registerTerminalIPC(ipcMain, app, ipcHandlersMap = {}) {
 
   // Auto-start LAN server if configured in server mode
   if (cfg.mode === 'server') {
-    lanServer.startLanServer({
-      port: cfg.serverPort || 8088,
-      licenseKey: activeKey,
-      ipcHandlers: ipcHandlersMap
-    });
+    const lic = getActiveLicense(app);
+    const plan = (lic?.plan || '').toLowerCase();
+    const isBasic = plan.includes('starter') || plan.includes('basic') || plan.includes('single');
+    if (!isBasic) {
+      if (plan.includes('enterprise')) {
+        lanServer.setMaxCashiers(10);
+      } else {
+        lanServer.setMaxCashiers(2); // Plan 2 (Store Pro) = 2 Cashiers max
+      }
+      lanServer.startLanServer({
+        port: cfg.serverPort || 8088,
+        licenseKey: activeKey,
+        ipcHandlers: ipcHandlersMap
+      });
+    }
   }
 
   // 1. Get Terminal Configuration & LAN Status
   ipcMain.handle('terminal:getStatus', () => {
     const config = loadConfig(app);
     const localIp = lanServer.getLocalIpAddress();
-    const serverKey = getActiveLicenseKey(app);
+    const lic = getActiveLicense(app);
+    const serverKey = lic?.key || null;
     return {
       mode: config.mode,
       serverIp: config.serverIp,
@@ -93,21 +108,41 @@ function registerTerminalIPC(ipcMain, app, ipcHandlersMap = {}) {
       counterName: config.counterName,
       licenseKey: config.licenseKey || '',
       serverLicenseKey: serverKey,
+      plan: lic?.plan || 'Store Pro',
       isServerRunning: config.mode === 'server'
     };
   });
 
   // 2. Save Configuration & Switch Mode
   ipcMain.handle('terminal:saveConfig', (_, newConfig) => {
+    if (newConfig.mode === 'server') {
+      const lic = getActiveLicense(app);
+      const plan = (lic?.plan || '').toLowerCase();
+      const isBasic = plan.includes('starter') || plan.includes('basic') || plan.includes('single');
+      if (isBasic) {
+        return {
+          success: false,
+          error: 'Multi-counter Hub is locked on Basic Single-PC Plan. Upgrade to Store Pro to connect cashier counters.'
+        };
+      }
+    }
+
     const res = saveConfig(app, newConfig);
     if (!res.success) return res;
 
     // Handle Server lifecycle
     if (newConfig.mode === 'server') {
-      const serverKey = getActiveLicenseKey(app);
+      const lic = getActiveLicense(app);
+      const plan = (lic?.plan || '').toLowerCase();
+      if (plan.includes('enterprise')) {
+        lanServer.setMaxCashiers(10);
+      } else {
+        lanServer.setMaxCashiers(2); // Plan 2: Max 2 Cashiers
+      }
+
       lanServer.startLanServer({
         port: newConfig.serverPort || 8088,
-        licenseKey: serverKey,
+        licenseKey: lic?.key || null,
         ipcHandlers: ipcHandlersMap
       });
     } else {
@@ -120,6 +155,16 @@ function registerTerminalIPC(ipcMain, app, ipcHandlersMap = {}) {
   // 3. Get Machine Local IP
   ipcMain.handle('terminal:getLocalIp', () => {
     return lanServer.getLocalIpAddress();
+  });
+
+  // 4. Get Connected Cashier Terminals
+  ipcMain.handle('terminal:getPairedTerminals', () => {
+    return lanServer.getPairedTerminals();
+  });
+
+  // 5. Unpair a Cashier Terminal
+  ipcMain.handle('terminal:unpairTerminal', (_, terminalId) => {
+    return { success: lanServer.unpairTerminal(terminalId) };
   });
 }
 

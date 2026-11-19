@@ -178,6 +178,17 @@ export default function UserManagement() {
       return setMsg({ type: 'error', text: 'Password is required for new users.' })
     }
 
+    // Plan 2 Gating: Max 2 Cashiers
+    if (!editingId && form.role === 'cashier') {
+      const activeCashiers = users.filter(u => u.role === 'cashier').length
+      if (activeCashiers >= 2) {
+        return setMsg({
+          type: 'error',
+          text: 'Store Pro limit reached: Maximum 2 Cashier user accounts allowed under Plan 2 (3 counters total). Upgrade to Enterprise to add more counters.'
+        })
+      }
+    }
+
     setSubmitting(true)
     setMsg(null)
 
@@ -322,6 +333,18 @@ export default function UserManagement() {
       />
 
       <div className="p-5 space-y-4 flex-1 overflow-auto">
+        {/* Plan 2 Store Pro Limit Banner */}
+        <div className="bg-blue-50/70 border border-blue-200 rounded-xl p-3 flex flex-col md:flex-row md:items-center justify-between gap-2 text-[12px]">
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-[18px] text-[#003c90]">point_of_sale</span>
+            <span className="text-slate-700">
+              <strong>Store Pro Plan 2:</strong> Allows 1 Main Server + up to <strong>2 Cashier Terminals</strong> (3 counters total).
+            </span>
+          </div>
+          <span className="font-bold px-2.5 py-1 rounded-full bg-blue-100 text-[#003c90] text-[11px] self-start md:self-auto">
+            {users.filter(u => u.role === 'cashier').length} / 2 Cashier Accounts Created
+          </span>
+        </div>
         {msg && (
           <div className={`flex items-center gap-2 px-4 py-3 rounded-lg text-[13px] font-semibold ${
             msg.type === 'error'

@@ -7,6 +7,8 @@ let serverInstance = null;
 let sseClients = [];
 let serverSecret = null;
 let activeServerLicenseKey = null;
+let pairedCashiers = new Map(); // terminalId -> { id, name, ip, pairedAt, lastSeen }
+let maxCashiersAllowed = 2; // Plan 2 / Store Pro limit: Max 2 Cashier Terminals
 
 /**
  * Returns the primary local IPv4 address of this machine on the local network.
@@ -145,8 +147,44 @@ function startLanServer({ port = 8088, storeName = 'MediSoft Pharmacy', ipcHandl
       }
     }
 
-    // 1. Health & Discovery Endpoint
+    // 1. Health & Discovery Endpoint with Counter Limit Check
     if (pathname === '/api/lan/health' && req.method === 'GET') {
+      const clientIp = req.socket.remoteAddress ? req.socket.remoteAddress.replace(/^.*:/, '') : '127.0.0.1';
+      const terminalId = (req.headers['x-terminal-id'] || url.searchParams.get('id') || clientIp).trim();
+      const terminalName = (req.headers['x-terminal-name'] || url.searchParams.get('name') || 'Cash Counter').trim();
+
+      const isLoopback = clientIp === '127.0.0.1' || clientIp === 'localhost';
+
+      if (!isLoopback) {
+        if (!pairedCashiers.has(terminalId)) {
+          if (pairedCashiers.size >= maxCashiersAllowed) {
+            res.writeHead(403, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              status: 'error',
+              error: 'COUNTER_LIMIT_REACHED',
+              message: `Counter limit reached: Store Pro allows a maximum of ${maxCashiersAllowed} Cashier Terminals (3 counters total). Please unpair an old terminal or upgrade to Enterprise to connect more counters.`,
+              maxAllowed: maxCashiersAllowed,
+              activeCount: pairedCashiers.size
+            }));
+            return;
+          }
+          // Register newly paired cashier counter
+          pairedCashiers.set(terminalId, {
+            id: terminalId,
+            name: terminalName,
+            ip: clientIp,
+            pairedAt: new Date().toISOString(),
+            lastSeen: new Date().toISOString()
+          });
+          console.log(`[LanServer] ✓ Paired new cashier counter ${pairedCashiers.size}/${maxCashiersAllowed}: "${terminalName}" (${clientIp})`);
+        } else {
+          // Update last seen
+          const existing = pairedCashiers.get(terminalId);
+          existing.lastSeen = new Date().toISOString();
+          if (terminalName) existing.name = terminalName;
+        }
+      }
+
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
         status: 'ok',
@@ -154,8 +192,41 @@ function startLanServer({ port = 8088, storeName = 'MediSoft Pharmacy', ipcHandl
         ip: getLocalIpAddress(),
         port,
         storeName,
-        serverTime: new Date().toISOString()
+        serverTime: new Date().toISOString(),
+        activeCashiers: pairedCashiers.size,
+        maxCashiers: maxCashiersAllowed
       }));
+      return;
+    }
+
+    // 1b. Terminals List Endpoint
+    if (pathname === '/api/lan/terminals' && req.method === 'GET') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        success: true,
+        terminals: Array.from(pairedCashiers.values()),
+        maxAllowed: maxCashiersAllowed,
+        count: pairedCashiers.size
+      }));
+      return;
+    }
+
+    // 1c. Unpair Terminal Endpoint
+    if (pathname === '/api/lan/terminals/unpair' && req.method === 'POST') {
+      try {
+        const body = await readJsonBody(req);
+        if (body.id && pairedCashiers.has(body.id)) {
+          pairedCashiers.delete(body.id);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, message: `Terminal ${body.id} unpaired.` }));
+        } else {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, message: 'Terminal not found.' }));
+        }
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, message: e.message }));
+      }
       return;
     }
 
@@ -340,9 +411,24 @@ function stopLanServer() {
   return { success: false, message: 'Server not running.' };
 }
 
+function getPairedTerminals() {
+  return Array.from(pairedCashiers.values());
+}
+
+function unpairTerminal(id) {
+  return pairedCashiers.delete(id);
+}
+
+function setMaxCashiers(count) {
+  maxCashiersAllowed = count;
+}
+
 module.exports = {
   startLanServer,
   stopLanServer,
   broadcast,
-  getLocalIpAddress
+  getLocalIpAddress,
+  getPairedTerminals,
+  unpairTerminal,
+  setMaxCashiers
 };

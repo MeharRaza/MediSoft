@@ -40,15 +40,59 @@ import UserManagement from './pages/settings/UserManagement'
 import BranchManagement from './pages/settings/BranchManagement'
 import TerminalSettings from './pages/settings/TerminalSettings'
 
-// ─── HARDWARE LICENSE GUARD ──────────────────────────────
+// ─── HARDWARE LICENSE GUARD & SUBSCRIPTION LOCK ──────────────
 function LicenseGuard({ children }) {
   const [status, setStatus] = useState(null)
+  const [lockInfo, setLockInfo] = useState(null)
+  const [checkingHeartbeat, setCheckingHeartbeat] = useState(false)
 
-  const verifyLicense = async () => {
+  const verifyLicense = async (manual = false) => {
     try {
       if (window.api?.license?.getStatus) {
         const res = await window.api.license.getStatus()
+        
+        // 1. Check offline verification result
+        if (res.isSuspended || res.isExpired) {
+          setLockInfo({
+            isSuspended: res.isSuspended,
+            isExpired: res.isExpired,
+            error: res.error,
+            storeName: res.license?.storeName,
+            key: res.license?.key
+          })
+          setStatus(false)
+          return
+        }
+
         setStatus(!!res.isActivated)
+
+        // 2. Online Heartbeat Check (Silent Background check if key exists)
+        if (res.isActivated && res.license?.key && !res.isCashierTerminal) {
+          if (manual) setCheckingHeartbeat(true)
+          fetch(`https://posapi.asiansol.com/api/license/heartbeat?key=${encodeURIComponent(res.license.key)}`, {
+            signal: AbortSignal.timeout(4000)
+          })
+            .then(r => r.json())
+            .then(hb => {
+              if (hb && hb.Valid === false) {
+                setLockInfo({
+                  isSuspended: hb.IsSuspended,
+                  isExpired: hb.IsExpired,
+                  error: hb.IsSuspended ? 'Software has been suspended by Administrator.' : 'Monthly subscription has expired. Please pay renewal fee to unlock.',
+                  storeName: hb.Store || res.license?.storeName,
+                  key: res.license?.key
+                })
+                setStatus(false)
+              } else if (hb && hb.Valid === true) {
+                setLockInfo(null)
+                setStatus(true)
+              }
+            })
+            .catch(() => {}) // Offline fallback: ignore network timeouts
+            .finally(() => {
+              if (manual) setCheckingHeartbeat(false)
+            })
+        }
       } else {
         // Fallback if running outside Electron
         setStatus(true)
@@ -71,6 +115,52 @@ function LicenseGuard({ children }) {
           <span className="text-white text-[13px] font-semibold tracking-wider">
             Checking Hardware License...
           </span>
+        </div>
+      </div>
+    )
+  }
+
+  // Remote Kill Switch or Monthly Subscription Expiry Lock Screen
+  if (lockInfo) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#0f172a] flex items-center justify-center p-4">
+        <div className="bg-white rounded-3xl p-8 max-w-md w-full text-center shadow-2xl border border-rose-200 animate-in fade-in zoom-in-95 duration-200">
+          <div className="w-16 h-16 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-rose-900/10">
+            <span className="material-symbols-outlined text-[36px]">lock</span>
+          </div>
+          <h2 className="text-[20px] font-bold text-slate-900 mb-1">
+            {lockInfo.isSuspended ? 'Software Service Suspended' : 'Subscription Expired'}
+          </h2>
+          <p className="text-[13px] text-slate-600 mb-5 leading-relaxed">
+            {lockInfo.error || 'Aapki pharmacy ka software subscription expire ya suspend ho chuka hai. Dobara unlock karne ke liye AsianSol Technologies se contact karein.'}
+          </p>
+          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-left text-[12px] space-y-1.5 mb-5">
+            <div className="flex justify-between">
+              <span className="text-slate-500">Pharmacy:</span>
+              <span className="font-bold text-slate-800">{lockInfo.storeName || 'MediSoft Store'}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">License Key:</span>
+              <code className="font-mono font-bold text-slate-800">{lockInfo.key || 'N/A'}</code>
+            </div>
+            <div className="flex justify-between pt-1 border-t border-slate-200">
+              <span className="text-slate-500">Support / Renewal:</span>
+              <span className="font-bold text-[#003c90]">AsianSol Technologies</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => verifyLicense(true)}
+            disabled={checkingHeartbeat}
+            className="w-full py-3 bg-[#003c90] hover:bg-[#002d6b] text-white font-bold text-[13px] rounded-xl shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-60"
+          >
+            {checkingHeartbeat ? (
+              <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : (
+              <span className="material-symbols-outlined text-[18px]">refresh</span>
+            )}
+            <span>{checkingHeartbeat ? 'Verifying with Server...' : 'Re-check License Status'}</span>
+          </button>
         </div>
       </div>
     )

@@ -61,11 +61,13 @@ export function setTerminalToken(token) {
 export async function checkServerHealth(
   ip = terminalState.serverIp,
   port = terminalState.serverPort,
-  licenseKey = terminalState.licenseKey
+  licenseKey = terminalState.licenseKey,
+  terminalName = terminalState.counterName
 ) {
   const targetIp = (ip || '127.0.0.1').trim();
   const targetPort = port || 8088;
   const targetKey = (licenseKey || terminalState.licenseKey || '').trim().toUpperCase();
+  const targetName = (terminalName || terminalState.counterName || 'Cash Counter').trim();
   const url = `http://${targetIp}:${targetPort}/api/lan/health`;
 
   const controller = new AbortController();
@@ -77,6 +79,7 @@ export async function checkServerHealth(
     if (targetKey) {
       headers['X-License-Key'] = targetKey;
     }
+    headers['X-Terminal-Name'] = targetName;
 
     const res = await fetch(url, { headers, signal: controller.signal });
     clearTimeout(timeoutId);
@@ -86,7 +89,7 @@ export async function checkServerHealth(
       const errData = await res.json().catch(() => ({}));
       return {
         ok: false,
-        error: errData.message || (res.status === 401 ? 'Unauthorized: Store Pro License Key does not match the Server PC.' : `Server returned HTTP ${res.status}`)
+        error: errData.message || (res.status === 401 ? 'Unauthorized: Store Pro License Key does not match the Server PC.' : res.status === 403 ? (errData.message || 'Counter limit reached on Server.') : `Server returned HTTP ${res.status}`)
       };
     }
 

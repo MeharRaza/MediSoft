@@ -478,7 +478,7 @@ module.exports = (ipcMain) => {
   })
 
   ipcMain.handle('sales:getReturns', (_, filters = {}) => {
-    let q = `SELECT sr.*, COALESCE(sr.customer_name, c.name, 'Walk-in') as customer_name FROM sale_returns sr
+    let q = `SELECT sr.*, COALESCE(c.name, 'Walk-in') as customer_name FROM sale_returns sr
       LEFT JOIN customers c ON c.id=sr.customer_id WHERE 1=1`
     const params = []
     if (filters.from_date) {

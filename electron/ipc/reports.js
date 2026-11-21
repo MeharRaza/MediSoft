@@ -104,29 +104,33 @@ module.exports = (ipcMain) => {
   })
 
   ipcMain.handle('reports:getStockReport', (_, filters = {}) => {
-    let q = `SELECT p.*, c.name as category_name, m.name as manufacturer_name,
-        COALESCE((
-          SELECT SUM(pi.qty - pi.qty_sold) 
-          FROM purchase_items pi 
-          WHERE pi.product_id = p.id
-        ), 0) as stock,
-        COALESCE((
-          SELECT SUM(
-            (pi.qty - pi.qty_sold) * 
-            (pi.purchase_price / COALESCE(NULLIF(pi.pcs_in_pack, 0), 1))
-          ) 
-          FROM purchase_items pi 
-          WHERE pi.product_id = p.id
-        ), 0) as stock_value
+    let q = `
+      SELECT 
+        p.id, p.name, p.generic_name, p.barcode, p.category_id, p.sale_price, p.trade_price, p.alert_qty,
+        c.name as category_name, m.name as manufacturer_name,
+        COALESCE(stk.total_stock, 0) as stock,
+        COALESCE(stk.total_value, 0) as stock_value
       FROM products p
-      LEFT JOIN categories c ON c.id=p.category_id
-      LEFT JOIN manufacturers m ON m.id=p.manufacturer_id
-      WHERE p.is_active=1`
+      LEFT JOIN categories c ON c.id = p.category_id
+      LEFT JOIN manufacturers m ON m.id = p.manufacturer_id
+      LEFT JOIN (
+        SELECT 
+          product_id,
+          SUM(qty - qty_sold) as total_stock,
+          SUM((qty - qty_sold) * (purchase_price / COALESCE(NULLIF(pcs_in_pack, 0), 1))) as total_value
+        FROM purchase_items
+        GROUP BY product_id
+      ) stk ON stk.product_id = p.id
+      WHERE p.is_active = 1`
     const params = []
-    if (filters.category_id) { q += ' AND p.category_id=?'; params.push(filters.category_id) }
-    q += ' GROUP BY p.id ORDER BY p.name'
+    if (filters.category_id) { q += ' AND p.category_id = ?'; params.push(filters.category_id) }
+    if (filters.search) {
+      q += ' AND (p.name LIKE ? OR p.generic_name LIKE ? OR p.barcode LIKE ?)'
+      params.push(`%${filters.search}%`, `%${filters.search}%`, `%${filters.search}%`)
+    }
+    q += ' ORDER BY p.name'
     const products = db.prepare(q).all(...params)
-    const totalValue = products.reduce((s, p) => s + p.stock_value, 0)
+    const totalValue = products.reduce((s, p) => s + (Number(p.stock_value) || 0), 0)
     console.log('📊 Stock Report - Total Products:', products.length, 'Total Value:', totalValue.toFixed(2))
     return { products, totalValue }
   })

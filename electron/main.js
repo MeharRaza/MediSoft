@@ -286,24 +286,38 @@ app.whenReady().then(() => {
       return originalHandle(channel, listener)
     }
 
-    require('./ipc/sales')(ipcMain)
-    require('./ipc/purchase')(ipcMain)
-    require('./ipc/inventory')(ipcMain)
-    require('./ipc/accounts')(ipcMain)
-    require('./ipc/hrm')(ipcMain)
-    require('./ipc/reports')(ipcMain)
-    require('./ipc/expenses')(ipcMain)
-    require('./ipc/settings')(ipcMain)
-    require('./ipc/fix-pcs')(ipcMain)
-    require('./ipc/license')(ipcMain, app)
-    const terminalManager = require('./server/terminalManager')
-    terminalManager.registerTerminalIPC(ipcMain, app, ipcHandlersMap)
-    setupUpdaterIPC()
-    logDebug('All IPC handlers registered successfully')
-    console.log('[MediSoft] All IPC handlers registered.')
+    const safeRegister = (name, fn) => {
+      try {
+        fn()
+        logDebug(`[IPC] ${name} registered`)
+      } catch (err) {
+        logDebug(`[IPC] Error registering ${name}: ` + (err.stack || err))
+        console.error(`[IPC] Error registering ${name}:`, err)
+      }
+    }
+
+    // Always register license and updater first so app security and versioning are resilient
+    safeRegister('license', () => require('./ipc/license')(ipcMain, app))
+    safeRegister('updater', () => setupUpdaterIPC())
+    safeRegister('sales', () => require('./ipc/sales')(ipcMain))
+    safeRegister('purchase', () => require('./ipc/purchase')(ipcMain))
+    safeRegister('inventory', () => require('./ipc/inventory')(ipcMain))
+    safeRegister('accounts', () => require('./ipc/accounts')(ipcMain))
+    safeRegister('hrm', () => require('./ipc/hrm')(ipcMain))
+    safeRegister('reports', () => require('./ipc/reports')(ipcMain))
+    safeRegister('expenses', () => require('./ipc/expenses')(ipcMain))
+    safeRegister('settings', () => require('./ipc/settings')(ipcMain))
+    safeRegister('fix-pcs', () => require('./ipc/fix-pcs')(ipcMain))
+    safeRegister('terminalManager', () => {
+      const terminalManager = require('./server/terminalManager')
+      terminalManager.registerTerminalIPC(ipcMain, app, ipcHandlersMap)
+    })
+
+    logDebug('All IPC handlers registration sequence completed')
+    console.log('[MediSoft] All IPC handlers registration sequence completed.')
   } catch (err) {
-    logDebug('IPC registration error: ' + (err.stack || err))
-    console.error('[MediSoft] IPC registration error:', err)
+    logDebug('Fatal IPC registration error: ' + (err.stack || err))
+    console.error('[MediSoft] Fatal IPC registration error:', err)
   }
 
   try {

@@ -771,8 +771,8 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_sales_customer_id ON sales(customer_id);
   CREATE INDEX IF NOT EXISTS idx_sales_created_at_status ON sales(created_at, status);
   CREATE INDEX IF NOT EXISTS idx_sale_returns_created_at ON sale_returns(created_at);
+  CREATE INDEX IF NOT EXISTS idx_sale_returns_sale_id ON sale_returns(sale_id);
   CREATE INDEX IF NOT EXISTS idx_sale_return_items_return_id ON sale_return_items(return_id);
-  CREATE INDEX IF NOT EXISTS idx_sale_return_items_sale_id ON sale_return_items(sale_id);
   CREATE INDEX IF NOT EXISTS idx_sale_items_sale_id ON sale_items(sale_id);
   CREATE INDEX IF NOT EXISTS idx_sale_items_product_id ON sale_items(product_id);
   CREATE INDEX IF NOT EXISTS idx_activity_logs_created_at ON activity_logs(created_at);

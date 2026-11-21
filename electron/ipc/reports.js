@@ -5,27 +5,35 @@ module.exports = (ipcMain) => {
   ipcMain.handle('reports:getSalesSummary', (_, filters = {}) => {
     const from = filters.from_date || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]
     const to   = filters.to_date   || new Date().toISOString().split('T')[0]
+    const fromDt = from.includes(' ') ? from : `${from} 00:00:00`
+    const toDt   = to.includes(' ') ? to : `${to} 23:59:59`
+
     const summary = db.prepare(`
       SELECT COUNT(*) as total_invoices, COALESCE(SUM(grand_total),0) as total_sales,
         COALESCE(SUM(discount),0) as total_discount, COALESCE(SUM(tax),0) as total_tax,
         COALESCE(SUM(CASE WHEN status='paid' THEN grand_total ELSE 0 END),0) as cash_sales,
         COALESCE(SUM(CASE WHEN status='credit' THEN grand_total ELSE 0 END),0) as credit_sales
-      FROM sales WHERE date(created_at) BETWEEN ? AND ? AND status!='voided'`).get(from, to)
+      FROM sales WHERE created_at >= ? AND created_at <= ? AND status != 'voided'`).get(fromDt, toDt)
+
     const daily = db.prepare(`
-      SELECT date(created_at) as day, COUNT(*) as invoices, SUM(grand_total) as total
-      FROM sales WHERE date(created_at) BETWEEN ? AND ? AND status!='voided'
-      GROUP BY day ORDER BY day`).all(from, to)
+      SELECT substr(created_at, 1, 10) as day, COUNT(*) as invoices, SUM(grand_total) as total
+      FROM sales WHERE created_at >= ? AND created_at <= ? AND status != 'voided'
+      GROUP BY day ORDER BY day`).all(fromDt, toDt)
+
     const topProducts = db.prepare(`
       SELECT p.name, SUM(si.qty) as qty_sold, SUM(si.total) as total_sales
       FROM sale_items si JOIN products p ON p.id=si.product_id
       JOIN sales s ON s.id=si.sale_id
-      WHERE date(s.created_at) BETWEEN ? AND ? AND s.status!='voided'
-      GROUP BY si.product_id ORDER BY total_sales DESC LIMIT 10`).all(from, to)
+      WHERE s.created_at >= ? AND s.created_at <= ? AND s.status != 'voided'
+      GROUP BY si.product_id ORDER BY total_sales DESC LIMIT 10`).all(fromDt, toDt)
+
     const invoices = db.prepare(`
-      SELECT s.*, c.name as customer_name FROM sales s
+      SELECT s.id, s.invoice_no, s.grand_total, s.paid_amount, s.status, s.created_at,
+             COALESCE(s.customer_name, c.name, 'Walk-in') as customer_name
+      FROM sales s
       LEFT JOIN customers c ON c.id=s.customer_id
-      WHERE date(s.created_at) BETWEEN ? AND ? AND s.status!='voided'
-      ORDER BY s.id DESC LIMIT 100`).all(from, to)
+      WHERE s.created_at >= ? AND s.created_at <= ? AND s.status != 'voided'
+      ORDER BY s.id DESC LIMIT 100`).all(fromDt, toDt)
 
     // Cashier-wise breakdown
     const byCashier = db.prepare(`
@@ -39,10 +47,10 @@ module.exports = (ipcMain) => {
              COALESCE(SUM(CASE WHEN s.payment_method='credit' THEN s.grand_total ELSE 0 END), 0) as credit_sales
       FROM sales s
       LEFT JOIN users u ON u.id = s.user_id
-      WHERE date(s.created_at) BETWEEN ? AND ? AND s.status != 'voided'
+      WHERE s.created_at >= ? AND s.created_at <= ? AND s.status != 'voided'
       GROUP BY s.user_id
       ORDER BY total_sales DESC
-    `).all(from, to)
+    `).all(fromDt, toDt)
 
     return { summary, daily, topProducts, invoices, byCashier }
   })

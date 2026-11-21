@@ -1,6 +1,7 @@
 const http = require('http');
 const os = require('os');
 const crypto = require('crypto');
+const zlib = require('zlib');
 const db = require('../database');
 
 let serverInstance = null;
@@ -402,8 +403,27 @@ function startLanServer({ port = 8088, storeName = 'MediSoft Pharmacy', ipcHandl
           broadcast('settings:updated', { channel });
         }
 
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true, data: result }));
+        const jsonPayload = JSON.stringify({ success: true, data: result });
+        const acceptEncoding = req.headers['accept-encoding'] || '';
+
+        if (acceptEncoding.includes('gzip') && jsonPayload.length > 1024) {
+          zlib.gzip(Buffer.from(jsonPayload), (zErr, gzipped) => {
+            if (!zErr && gzipped) {
+              res.writeHead(200, {
+                'Content-Type': 'application/json',
+                'Content-Encoding': 'gzip',
+                'Content-Length': gzipped.length
+              });
+              res.end(gzipped);
+            } else {
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(jsonPayload);
+            }
+          });
+        } else {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(jsonPayload);
+        }
       } catch (err) {
         console.error('[LanServer] RPC Error:', err);
         res.writeHead(500, { 'Content-Type': 'application/json' });

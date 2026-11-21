@@ -214,15 +214,24 @@ module.exports = (ipcMain) => {
 
   ipcMain.handle('sales:getInvoices', (_, filters = {}) => {
     let q = `
-      SELECT s.*, c.name as customer_name, u.full_name as cashier_name,
-             (SELECT COUNT(*) FROM sale_items WHERE sale_id = s.id) as items_count
+      SELECT s.id, s.invoice_no, s.customer_id, s.branch_id, s.user_id, s.payment_method,
+             s.sub_total, s.discount, s.tax, s.grand_total, s.paid_amount, s.change_amount,
+             s.status, s.notes, s.created_at,
+             COALESCE(s.customer_name, c.name, 'Walk-in') as customer_name,
+             COALESCE(u.full_name, u.username, 'Administrator') as cashier_name
       FROM sales s
       LEFT JOIN customers c ON c.id=s.customer_id
       LEFT JOIN users u ON u.id=s.user_id
       WHERE 1=1`
     const params = []
-    if (filters.from_date) { q += ' AND date(s.created_at)>=?'; params.push(filters.from_date) }
-    if (filters.to_date)   { q += ' AND date(s.created_at)<=?'; params.push(filters.to_date) }
+    if (filters.from_date) {
+      q += ' AND s.created_at >= ?'
+      params.push(filters.from_date.includes(' ') ? filters.from_date : `${filters.from_date} 00:00:00`)
+    }
+    if (filters.to_date) {
+      q += ' AND s.created_at <= ?'
+      params.push(filters.to_date.includes(' ') ? filters.to_date : `${filters.to_date} 23:59:59`)
+    }
     if (filters.status)    { q += ' AND s.status=?'; params.push(filters.status) }
     if (filters.customer_id) { q += ' AND s.customer_id=?'; params.push(filters.customer_id) }
     if (filters.user_id)   { q += ' AND s.user_id=?'; params.push(filters.user_id) }
@@ -231,6 +240,7 @@ module.exports = (ipcMain) => {
     if (filters.search) { 
       q += ` AND (
         s.invoice_no LIKE ? 
+        OR s.customer_name LIKE ?
         OR c.name LIKE ? 
         OR s.id IN (
           SELECT si.sale_id FROM sale_items si 
@@ -238,7 +248,7 @@ module.exports = (ipcMain) => {
           WHERE p.name LIKE ?
         )
       )`
-      params.push(`%${filters.search}%`, `%${filters.search}%`, `%${filters.search}%`)
+      params.push(`%${filters.search}%`, `%${filters.search}%`, `%${filters.search}%`, `%${filters.search}%`)
     }
     
     q += ' ORDER BY s.id DESC'
@@ -468,11 +478,17 @@ module.exports = (ipcMain) => {
   })
 
   ipcMain.handle('sales:getReturns', (_, filters = {}) => {
-    let q = `SELECT sr.*, c.name as customer_name FROM sale_returns sr
+    let q = `SELECT sr.*, COALESCE(sr.customer_name, c.name, 'Walk-in') as customer_name FROM sale_returns sr
       LEFT JOIN customers c ON c.id=sr.customer_id WHERE 1=1`
     const params = []
-    if (filters.from_date) { q += ' AND date(sr.created_at)>=?'; params.push(filters.from_date) }
-    if (filters.to_date)   { q += ' AND date(sr.created_at)<=?'; params.push(filters.to_date) }
+    if (filters.from_date) {
+      q += ' AND sr.created_at >= ?'
+      params.push(filters.from_date.includes(' ') ? filters.from_date : `${filters.from_date} 00:00:00`)
+    }
+    if (filters.to_date) {
+      q += ' AND sr.created_at <= ?'
+      params.push(filters.to_date.includes(' ') ? filters.to_date : `${filters.to_date} 23:59:59`)
+    }
     q += ' ORDER BY sr.id DESC'
     return db.prepare(q).all(...params)
   })

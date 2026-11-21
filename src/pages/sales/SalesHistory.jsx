@@ -49,21 +49,33 @@ export default function SalesHistory() {
   const [itemHistory, setItemHistory] = useState(null)
   const [loadingItemHistory, setLoadingItemHistory] = useState(false)
 
+  // Fast Pagination state (Prevents rendering thousands of DOM elements)
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(50)
+
+  const totalPages = Math.ceil(invoices.length / (pageSize === 'all' ? (invoices.length || 1) : pageSize)) || 1
+  const paginatedInvoices = useMemo(() => {
+    if (pageSize === 'all') return invoices
+    const start = (page - 1) * pageSize
+    return invoices.slice(start, start + pageSize)
+  }, [invoices, page, pageSize])
+
   const fetchInvoices = async () => {
     setLoading(true)
     try {
-      const data = await api.sales.getInvoices({
-        from_date: fromDate,
-        to_date: toDate,
-        status: status || undefined,
-        search: search || undefined,
-        user_id: selectedCashier || undefined
-      })
+      const [data, returnsData] = await Promise.all([
+        api.sales.getInvoices({
+          from_date: fromDate,
+          to_date: toDate,
+          status: status || undefined,
+          search: search || undefined,
+          user_id: selectedCashier || undefined
+        }),
+        api.sales.getReturns({ from_date: fromDate, to_date: toDate })
+      ])
       setInvoices(Array.isArray(data) ? data : [])
-      
-      // Also fetch returns for the same period
-      const returnsData = await api.sales.getReturns({ from_date: fromDate, to_date: toDate })
       setReturns(Array.isArray(returnsData) ? returnsData : [])
+      setPage(1)
     } catch (e) {
       setMsg({ type: 'error', text: 'Failed to load invoices: ' + e.message })
       console.error('❌ Error loading invoices:', e)
@@ -93,10 +105,13 @@ export default function SalesHistory() {
     }).catch(() => {})
   }, [])
   
-  // Load all products for item history search
-  useEffect(() => {
-    api.inventory.getProducts({ loadAll: true }).then(data => setProducts(Array.isArray(data) ? data : []))
-  }, [])
+  // Lazy-load products only when Item History is explicitly opened
+  const handleOpenItemHistory = () => {
+    setShowItemHistory(true)
+    if (products.length === 0) {
+      api.inventory.getProducts({ loadAll: true }).then(data => setProducts(Array.isArray(data) ? data : []))
+    }
+  }
   
   // Real-time search suggestions (invoices + products)
   useEffect(() => {
@@ -287,7 +302,7 @@ export default function SalesHistory() {
       <PageHeader title="Sales History" subtitle="View and filter all sales invoices"
         actions={
           <div className="flex gap-2">
-            <Btn variant="outline" onClick={() => setShowItemHistory(true)}>
+            <Btn variant="outline" onClick={handleOpenItemHistory}>
               <span className="material-symbols-outlined text-[16px]">history</span>Item History
             </Btn>
             <Btn variant="primary" onClick={fetchInvoices}>
@@ -379,7 +394,91 @@ export default function SalesHistory() {
             </div>
           )}
         </Card>
-        <Card>{loading ? <div className="flex items-center justify-center py-16"><div className="w-8 h-8 border-4 border-[#003c90]/20 border-t-[#003c90] rounded-full animate-spin" /></div> : <Table columns={columns} data={invoices} emptyMsg="No invoices found" />}</Card>
+        <Card className="overflow-hidden">
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-16 text-[#737784] space-y-2">
+              <div className="w-8 h-8 border-4 border-[#003c90]/20 border-t-[#003c90] rounded-full animate-spin" />
+              <p className="text-[12px] font-semibold">Loading sales invoices...</p>
+            </div>
+          ) : (
+            <>
+              <Table columns={columns} data={paginatedInvoices} emptyMsg="No invoices found" />
+
+              {/* Fast Pagination Bar */}
+              <div className="px-5 py-3 border-t border-[#eceef0] flex flex-col sm:flex-row items-center justify-between gap-3 bg-white text-[12px]">
+                <div className="flex items-center gap-2 text-[#737784]">
+                  <span>
+                    Showing <strong className="text-[#191c1e]">{invoices.length === 0 ? 0 : (page - 1) * (pageSize === 'all' ? invoices.length : pageSize) + 1}</strong> to <strong className="text-[#191c1e]">{pageSize === 'all' ? invoices.length : Math.min(page * pageSize, invoices.length)}</strong> of <strong className="text-[#003c90]">{invoices.length.toLocaleString()}</strong> invoices
+                  </span>
+                  <span className="text-slate-300">|</span>
+                  <div className="flex items-center gap-1.5">
+                    <span>Rows:</span>
+                    <select
+                      value={pageSize}
+                      onChange={e => {
+                        setPageSize(e.target.value === 'all' ? 'all' : Number(e.target.value))
+                        setPage(1)
+                      }}
+                      className="px-2 py-1 border border-[#c3c6d5] rounded bg-white text-[11px] font-bold text-[#191c1e] focus:outline-none focus:ring-1 focus:ring-[#003c90]"
+                    >
+                      <option value={25}>25</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                      <option value={250}>250</option>
+                      <option value="all">All ({invoices.length})</option>
+                    </select>
+                  </div>
+                </div>
+
+                {pageSize !== 'all' && totalPages > 1 && (
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setPage(1)}
+                      disabled={page === 1}
+                      className="px-2 py-1 border border-[#c3c6d5] rounded hover:bg-[#f2f4f6] disabled:opacity-40 disabled:hover:bg-white text-[11px] font-bold transition-colors"
+                      title="First Page"
+                    >
+                      « First
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPage(p => Math.max(1, p - 1))}
+                      disabled={page === 1}
+                      className="px-2.5 py-1 border border-[#c3c6d5] rounded hover:bg-[#f2f4f6] disabled:opacity-40 disabled:hover:bg-white text-[11px] font-bold flex items-center gap-1 transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-[14px]">chevron_left</span>
+                      Prev
+                    </button>
+
+                    <span className="px-3 py-1 bg-blue-50 text-[#003c90] border border-blue-200 font-bold rounded text-[11px]">
+                      Page {page} of {totalPages}
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                      disabled={page === totalPages}
+                      className="px-2.5 py-1 border border-[#c3c6d5] rounded hover:bg-[#f2f4f6] disabled:opacity-40 disabled:hover:bg-white text-[11px] font-bold flex items-center gap-1 transition-colors"
+                    >
+                      Next
+                      <span className="material-symbols-outlined text-[14px]">chevron_right</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPage(totalPages)}
+                      disabled={page === totalPages}
+                      className="px-2 py-1 border border-[#c3c6d5] rounded hover:bg-[#f2f4f6] disabled:opacity-40 disabled:hover:bg-white text-[11px] font-bold transition-colors"
+                      title="Last Page"
+                    >
+                      Last »
+                    </button>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </Card>
       </div>
       <Modal open={!!viewInvoice} onClose={closeInvoiceModal} title={`Invoice — ${viewInvoice?.invoice_no || ''}`} width="max-w-4xl">
         {viewInvoice && <div className="space-y-4">

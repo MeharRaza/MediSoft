@@ -64,9 +64,13 @@ createBackup()
 
 const db = new Database(dbPath)
 
-// Enable WAL mode for better performance
+// Enable WAL mode and high-performance settings
 db.pragma('journal_mode = WAL')
 db.pragma('foreign_keys = ON')
+db.pragma('synchronous = NORMAL')
+db.pragma('cache_size = -64000') // 64MB RAM page cache
+db.pragma('temp_store = MEMORY')
+db.pragma('mmap_size = 268435456') // 256MB memory mapping
 
 // ─── MIGRATIONS ────────────────────────────────────────────────────────────
 // Run migrations to add missing columns to existing databases
@@ -762,6 +766,13 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_purchase_items_stock_fifo ON purchase_items(product_id, qty, qty_sold, expiry_date);
   CREATE INDEX IF NOT EXISTS idx_purchases_created_at ON purchases(created_at);
   CREATE INDEX IF NOT EXISTS idx_sales_created_at ON sales(created_at);
+  CREATE INDEX IF NOT EXISTS idx_sales_user_id ON sales(user_id);
+  CREATE INDEX IF NOT EXISTS idx_sales_status ON sales(status);
+  CREATE INDEX IF NOT EXISTS idx_sales_customer_id ON sales(customer_id);
+  CREATE INDEX IF NOT EXISTS idx_sales_created_at_status ON sales(created_at, status);
+  CREATE INDEX IF NOT EXISTS idx_sale_returns_created_at ON sale_returns(created_at);
+  CREATE INDEX IF NOT EXISTS idx_sale_return_items_return_id ON sale_return_items(return_id);
+  CREATE INDEX IF NOT EXISTS idx_sale_return_items_sale_id ON sale_return_items(sale_id);
   CREATE INDEX IF NOT EXISTS idx_sale_items_sale_id ON sale_items(sale_id);
   CREATE INDEX IF NOT EXISTS idx_sale_items_product_id ON sale_items(product_id);
   CREATE INDEX IF NOT EXISTS idx_activity_logs_created_at ON activity_logs(created_at);
